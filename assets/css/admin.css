@@ -1,0 +1,40 @@
+/* Estilos para módulos de administración */
+
+.table-responsive {
+    border-radius: 10px;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    margin: 0 2px;
+}
+
+.modal-dialog {
+    max-width: 600px;
+}
+
+.form-label {
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* Paginación al pie en Gestión de Documentos de interés */
+.pagina-documentos-interes {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+.pagina-documentos-interes .documentos-interes-contenido {
+    flex: 1 1 auto;
+}
+.pagina-documentos-interes .documentos-interes-paginacion {
+    padding-bottom: 0.5rem;
+}

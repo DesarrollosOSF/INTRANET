@@ -1,0 +1,23 @@
+/* Estilos para evaluaciones */
+
+.opciones-respuesta .form-check {
+    padding: 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.opciones-respuesta .form-check:hover {
+    background-color: #f8f9fa;
+    border-color: var(--primary-color);
+}
+
+.opciones-respuesta .form-check-input:checked ~ .form-check-label {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.opciones-respuesta .form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}

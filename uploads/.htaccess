@@ -1,0 +1,17 @@
+# Seguridad para archivos subidos
+# - No ejecutar PHP ni otros scripts en esta carpeta
+# - Opcional: desactivar listado de directorio
+
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+
+# Evitar ejecución de scripts (por si el servidor interpreta .php u otros)
+<FilesMatch "\.(php|php3|php4|php5|phtml|pl|py|cgi|sh|asp|aspx|jsp)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+</FilesMatch>
+
+# Desactivar listado de directorio (opcional)
+Options -Indexes

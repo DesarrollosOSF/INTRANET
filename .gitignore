@@ -1,0 +1,37 @@
+# Archivos de configuración local
+config/local.php
+
+# Directorio de uploads (mantener estructura pero ignorar contenido)
+uploads/*
+!uploads/.gitkeep
+!uploads/.htaccess
+
+# Archivos temporales
+*.tmp
+*.log
+*.cache
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node modules (si se agregan)
+node_modules/
+
+# Archivos de respaldo
+*.bak
+*.backup
+
+# Scripts SQL locales (el esquema/migraciones se comparten por separado)
+database/
+
+# Documentación interna de desarrollo (opcional excluir)
+# DIAGNOSTICO.md

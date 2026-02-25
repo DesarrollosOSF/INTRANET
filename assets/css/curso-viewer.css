@@ -1,0 +1,47 @@
+/* Estilos específicos para el visualizador de cursos */
+
+.material-viewer {
+    position: relative;
+}
+
+.material-viewer video,
+.material-viewer iframe,
+.material-viewer img {
+    border-radius: 8px;
+}
+
+/* Prevenir acciones de descarga */
+.material-viewer * {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+/* Estilos para el sidebar */
+.sticky-top {
+    position: sticky;
+    top: 80px;
+    z-index: 1020;
+}
+
+.list-group-item.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+/* Responsive para visualizador */
+@media (max-width: 768px) {
+    .sticky-top {
+        position: relative;
+        top: 0;
+    }
+    
+    .material-viewer video,
+    .material-viewer iframe {
+        height: 300px !important;
+    }
+}
