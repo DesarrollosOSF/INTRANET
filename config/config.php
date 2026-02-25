@@ -12,9 +12,19 @@ session_start();
 // Zona horaria
 date_default_timezone_set('America/Bogota');
 
-// Rutas
-//define('BASE_URL', 'http://localhost/DesarrollosDuvan/Intranet-OSF/');
-define('BASE_URL', '/DesarrollosDuvan/Intranet-OSF/');
+// Override opcional: crear config/local.php con define('BASE_URL', '...'); para forzar una ruta
+if (file_exists(__DIR__ . '/local.php')) {
+    require_once __DIR__ . '/local.php';
+}
+
+// Rutas: BASE_URL se calcula según la ubicación del proyecto (funciona en local y en servidor)
+if (!defined('BASE_URL')) {
+    $docRoot = str_replace('\\', '/', rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/'));
+    $projectRoot = str_replace('\\', '/', realpath(__DIR__ . '/..'));
+    $basePath = trim(str_replace($docRoot, '', $projectRoot), '/');
+    $basePath = $basePath === '' ? '/' : '/' . $basePath . '/';
+    define('BASE_URL', $basePath);
+}
 define('BASE_PATH', __DIR__ . '/../');
 
 // Rutas de archivos
