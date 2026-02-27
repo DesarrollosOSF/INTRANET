@@ -48,6 +48,9 @@ define('ALLOWED_DOCUMENTOS_INTERES_MIMES', [
 
 // Configuración de seguridad
 define('SESSION_TIMEOUT', 3600); // 1 hora en segundos
+define('MAX_INTENTOS_LOGIN', 3);   // Intentos fallidos antes de bloquear
+define('BLOQUEO_LOGIN_HORAS', 3); // Horas de bloqueo tras superar intentos
+define('RESET_INTENTOS_SIN_ACTIVIDAD_HORAS', 5); // Sin intentos durante X horas: se resetean y vuelve a tener 3 intentos
 
 // Incluir configuración de base de datos
 require_once __DIR__ . '/database.php';
@@ -129,6 +132,124 @@ function requerirPermiso($permiso_nombre) {
     if (!tienePermiso($permiso_nombre)) {
         header('Location: ' . BASE_URL . 'login.php?error=sin_permiso');
         exit;
+    }
+}
+
+/**
+ * Comprueba si un email está bloqueado por intentos fallidos de login.
+ * Resetea automáticamente los intentos si: (1) ya pasó el tiempo de bloqueo, o
+ * (2) no ha habido intentos en RESET_INTENTOS_SIN_ACTIVIDAD_HORAS (el usuario vuelve a tener 3 intentos).
+ * @param string $email Email del usuario
+ * @return array ['bloqueado' => bool, 'bloqueado_hasta' => string|null] bloqueado_hasta en formato Y-m-d H:i:s
+ */
+function estaUsuarioBloqueadoLogin($email) {
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("
+            SELECT intentos_fallidos, bloqueado_hasta, ultimo_intento
+            FROM intentos_login
+            WHERE email = ?
+        ");
+        $stmt->execute([$email]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return ['bloqueado' => false, 'bloqueado_hasta' => null];
+        }
+
+        $ahora = date('Y-m-d H:i:s');
+        $bloqueadoHasta = $row['bloqueado_hasta'];
+        $ultimoIntento = $row['ultimo_intento'];
+
+        // 1) Si el bloqueo ya expiró: resetear y dar 3 intentos de nuevo
+        if ($bloqueadoHasta !== null && $ahora >= $bloqueadoHasta) {
+            limpiarIntentosFallidosLogin($email);
+            return ['bloqueado' => false, 'bloqueado_hasta' => null];
+        }
+
+        // 2) Si hace más de X horas que no intenta: resetear intentos (vuelve a tener 3)
+        if ($ultimoIntento !== null) {
+            $limiteActividad = date('Y-m-d H:i:s', strtotime('-' . RESET_INTENTOS_SIN_ACTIVIDAD_HORAS . ' hours'));
+            if ($ultimoIntento <= $limiteActividad) {
+                limpiarIntentosFallidosLogin($email);
+                return ['bloqueado' => false, 'bloqueado_hasta' => null];
+            }
+        }
+
+        // 3) Sigue bloqueado o con intentos pendientes
+        if ($bloqueadoHasta === null) {
+            return ['bloqueado' => false, 'bloqueado_hasta' => null];
+        }
+        return ['bloqueado' => true, 'bloqueado_hasta' => $bloqueadoHasta];
+    } catch (Exception $e) {
+        error_log("Error al verificar bloqueo de login: " . $e->getMessage());
+        return ['bloqueado' => false, 'bloqueado_hasta' => null];
+    }
+}
+
+/**
+ * Registra un intento fallido de login. Si alcanza MAX_INTENTOS_LOGIN, bloquea el usuario por BLOQUEO_LOGIN_HORAS.
+ * @param string $email Email del usuario
+ * @return array ['bloqueado' => bool, 'intentos_restantes' => int|null, 'bloqueado_hasta' => string|null]
+ */
+function registrarIntentoFallidoLogin($email) {
+    try {
+        $pdo = getDBConnection();
+        $ahora = date('Y-m-d H:i:s');
+        // Insertar o actualizar (MySQL: INSERT ... ON DUPLICATE KEY UPDATE)
+        $stmt = $pdo->prepare("
+            INSERT INTO intentos_login (email, intentos_fallidos, ultimo_intento)
+            VALUES (?, 1, ?)
+            ON DUPLICATE KEY UPDATE
+                intentos_fallidos = intentos_fallidos + 1,
+                ultimo_intento = ?
+        ");
+        $stmt->execute([$email, $ahora, $ahora]);
+
+        $stmt = $pdo->prepare("
+            SELECT intentos_fallidos FROM intentos_login WHERE email = ?
+        ");
+        $stmt->execute([$email]);
+        $row = $stmt->fetch();
+        $intentos = (int) ($row['intentos_fallidos'] ?? 0);
+
+        if ($intentos >= MAX_INTENTOS_LOGIN) {
+            $bloqueadoHasta = date('Y-m-d H:i:s', strtotime("+" . BLOQUEO_LOGIN_HORAS . " hours"));
+            $stmt = $pdo->prepare("
+                UPDATE intentos_login SET bloqueado_hasta = ? WHERE email = ?
+            ");
+            $stmt->execute([$bloqueadoHasta, $email]);
+            return [
+                'bloqueado' => true,
+                'intentos_restantes' => 0,
+                'bloqueado_hasta' => $bloqueadoHasta
+            ];
+        }
+
+        $restantes = max(0, MAX_INTENTOS_LOGIN - $intentos);
+        return [
+            'bloqueado' => false,
+            'intentos_restantes' => $restantes,
+            'bloqueado_hasta' => null
+        ];
+    } catch (Exception $e) {
+        error_log("Error al registrar intento fallido: " . $e->getMessage());
+        return ['bloqueado' => false, 'intentos_restantes' => null, 'bloqueado_hasta' => null];
+    }
+}
+
+/**
+ * Limpia los intentos fallidos para un email (llamar tras login exitoso).
+ * @param string $email Email del usuario
+ */
+function limpiarIntentosFallidosLogin($email) {
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("
+            DELETE FROM intentos_login WHERE email = ?
+        ");
+        $stmt->execute([$email]);
+    } catch (Exception $e) {
+        error_log("Error al limpiar intentos fallidos: " . $e->getMessage());
     }
 }
 

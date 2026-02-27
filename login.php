@@ -8,14 +8,18 @@ if (isset($_SESSION['usuario_id']) && !isset($_GET['error'])) {
 }
 
 $error = '';
+$bloqueado_hasta = null; // Para mostrar hora de desbloqueo cuando hay bloqueo por intentos fallidos
 if (isset($_GET['error'])) {
     if ($_GET['error'] === 'sin_permiso') {
         $error = 'Su cuenta no tiene permisos para acceder. Inicie sesión con otra cuenta.';
-        // Solo se vacía la sesión de este navegador (no afecta a otros usuarios del sistema)
         $_SESSION = [];
     } elseif ($_GET['error'] === 'cuenta_desactivada') {
         $error = 'Su cuenta está desactivada. Contacte al administrador.';
         $_SESSION = [];
+    } elseif ($_GET['error'] === 'usuario_bloqueado') {
+        $error = 'Su usuario ha sido bloqueado por ' . BLOQUEO_LOGIN_HORAS . ' horas debido a múltiples intentos fallidos. Intente más tarde.';
+        $bloqueado_hasta = $_SESSION['login_bloqueado_hasta'] ?? null;
+        unset($_SESSION['login_bloqueado_hasta']);
     }
 }
 
@@ -27,6 +31,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Por favor complete todos los campos';
     } else {
         try {
+            // Verificar si el usuario está bloqueado por intentos fallidos
+            $estadoBloqueo = estaUsuarioBloqueadoLogin($email);
+            if ($estadoBloqueo['bloqueado']) {
+                $bloqueado_hasta = $estadoBloqueo['bloqueado_hasta'];
+                $_SESSION['login_bloqueado_hasta'] = $bloqueado_hasta;
+                header('Location: ' . BASE_URL . 'login.php?error=usuario_bloqueado');
+                exit;
+            }
+
             $pdo = getDBConnection();
             $stmt = $pdo->prepare("
                 SELECT u.id, u.nombre_completo, u.email, u.password, u.activo, r.nombre as rol
@@ -40,6 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             if ($usuario && password_verify($password, $usuario['password'])) {
                 if ($usuario['activo'] == 1) {
+                    // Limpiar intentos fallidos al iniciar sesión correctamente
+                    limpiarIntentosFallidosLogin($email);
                     // Iniciar sesión
                     $_SESSION['usuario_id'] = $usuario['id'];
                     $_SESSION['nombre_completo'] = $usuario['nombre_completo'];
@@ -55,7 +70,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = 'Su cuenta está desactivada. Contacte al administrador.';
                 }
             } else {
+                // Contraseña incorrecta: registrar intento fallido
+                $resultado = registrarIntentoFallidoLogin($email);
+                if ($resultado['bloqueado']) {
+                    $_SESSION['login_bloqueado_hasta'] = $resultado['bloqueado_hasta'];
+                    header('Location: ' . BASE_URL . 'login.php?error=usuario_bloqueado');
+                    exit;
+                }
                 $error = 'Email o contraseña incorrectos';
+                if ($resultado['intentos_restantes'] !== null && $resultado['intentos_restantes'] > 0) {
+                    $error .= '. Le quedan ' . $resultado['intentos_restantes'] . ' intentos antes del bloqueo.';
+                }
             }
         } catch (Exception $e) {
             $error = 'Error al iniciar sesión. Intente nuevamente.';
@@ -88,6 +113,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if ($error): ?>
                 <div class="alert alert-danger" role="alert">
                     <i class="bi bi-exclamation-triangle-fill me-2"></i><?php echo $error; ?>
+                    <?php if ($bloqueado_hasta): ?>
+                        <hr class="my-2">
+                        <small>Podrá intentar de nuevo después de: <strong><?php echo date('d/m/Y H:i', strtotime($bloqueado_hasta)); ?></strong></small>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
             
@@ -118,5 +147,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <?php if ($error && isset($_GET['error']) && $_GET['error'] === 'usuario_bloqueado'): ?>
+    <script>
+        alert('Su usuario ha sido bloqueado por <?php echo BLOQUEO_LOGIN_HORAS; ?> horas por múltiples intentos fallidos de acceso. Podrá intentar de nuevo una vez transcurrido ese tiempo.');
+    </script>
+    <?php endif; ?>
 </body>
 </html>
