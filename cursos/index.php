@@ -137,79 +137,89 @@ $cursos = $stmt->fetchAll();
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var grid = document.getElementById('cursosGrid');
-    var overlay = document.getElementById('cursoFullscreen');
-    var closeBtn = document.getElementById('cursoFullscreenClose');
-    var backdrop = overlay ? overlay.querySelector('.curso-fullscreen-backdrop') : null;
-    var lastFocusedBlock = null;
+(function() {
+    function initCursosPage() {
+        var grid = document.getElementById('cursosGrid');
+        var overlay = document.getElementById('cursoFullscreen');
+        var closeBtn = document.getElementById('cursoFullscreenClose');
+        var backdrop = overlay ? overlay.querySelector('.curso-fullscreen-backdrop') : null;
+        var lastFocusedBlock = null;
 
-    function openFullscreen(block) {
-        if (!overlay) return;
-        lastFocusedBlock = block;
-        var nombre = block.getAttribute('data-nombre') || '';
-        var descripcion = block.getAttribute('data-descripcion') || '';
-        var imagen = block.getAttribute('data-imagen') || '';
-        var dependencia = block.getAttribute('data-dependencia') || '';
-        var cursoId = block.getAttribute('data-curso-id') || '';
-        var inscrito = block.getAttribute('data-inscrito') === '1';
-        var evaluacionAprobada = parseInt(block.getAttribute('data-evaluacion-aprobada') || '0', 10);
+        function openFullscreen(block) {
+            if (!overlay) return;
+            lastFocusedBlock = block;
+            var nombre = block.getAttribute('data-nombre') || '';
+            var descripcion = block.getAttribute('data-descripcion') || '';
+            var imagen = block.getAttribute('data-imagen') || '';
+            var dependencia = block.getAttribute('data-dependencia') || '';
+            var cursoId = block.getAttribute('data-curso-id') || '';
+            var inscrito = block.getAttribute('data-inscrito') === '1';
+            var evaluacionAprobada = parseInt(block.getAttribute('data-evaluacion-aprobada') || '0', 10);
 
-        document.getElementById('cursoFullscreenTitulo').textContent = nombre;
-        document.getElementById('cursoFullscreenDependencia').innerHTML = '<i class="bi bi-diagram-3 me-1"></i>' + dependencia.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        var body = document.getElementById('cursoFullscreenBody');
-        var footer = document.getElementById('cursoFullscreenFooter');
+            document.getElementById('cursoFullscreenTitulo').textContent = nombre;
+            document.getElementById('cursoFullscreenDependencia').innerHTML = '<i class="bi bi-diagram-3 me-1"></i>' + dependencia.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            var body = document.getElementById('cursoFullscreenBody');
+            var footer = document.getElementById('cursoFullscreenFooter');
 
-        if (imagen) {
-            body.innerHTML = '<img src="' + imagen.replace(/"/g, '&quot;') + '" alt="' + nombre.replace(/"/g, '&quot;') + '" class="curso-fullscreen-imagen">';
-        } else {
-            body.innerHTML = '<div class="curso-fullscreen-sin-imagen"><i class="bi bi-book"></i></div>';
-        }
-        body.innerHTML += '<div class="curso-fullscreen-descripcion"><p>' + (descripcion || 'Sin descripción.').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</p></div>';
-
-        if (inscrito) {
-            if (evaluacionAprobada > 0) {
-                footer.innerHTML = '<span class="badge bg-success me-2"><i class="bi bi-trophy-fill me-1"></i>Finalizado</span><a href="ver_curso.php?id=' + cursoId + '" class="btn btn-light btn-sm"><i class="bi bi-play-circle me-1"></i>Ver curso</a>';
+            if (imagen) {
+                body.innerHTML = '<img src="' + imagen.replace(/"/g, '&quot;') + '" alt="' + nombre.replace(/"/g, '&quot;') + '" class="curso-fullscreen-imagen">';
             } else {
-                footer.innerHTML = '<span class="badge bg-info me-2"><i class="bi bi-check-circle me-1"></i>Inscrito</span><a href="ver_curso.php?id=' + cursoId + '" class="btn btn-primary btn-sm"><i class="bi bi-play-circle me-1"></i>Continuar</a>';
+                body.innerHTML = '<div class="curso-fullscreen-sin-imagen"><i class="bi bi-book"></i></div>';
             }
-        } else {
-            footer.innerHTML = '<form method="POST" class="d-inline"><input type="hidden" name="curso_id" value="' + cursoId + '"><button type="submit" name="inscribirse" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Inscribirse</button></form>';
+            body.innerHTML += '<div class="curso-fullscreen-descripcion"><p>' + (descripcion || 'Sin descripción.').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</p></div>';
+
+            if (inscrito) {
+                if (evaluacionAprobada > 0) {
+                    footer.innerHTML = '<span class="badge bg-success me-2"><i class="bi bi-trophy-fill me-1"></i>Finalizado</span><a href="ver_curso.php?id=' + cursoId + '" class="btn btn-light btn-sm"><i class="bi bi-play-circle me-1"></i>Ver curso</a>';
+                } else {
+                    footer.innerHTML = '<span class="badge bg-info me-2"><i class="bi bi-check-circle me-1"></i>Inscrito</span><a href="ver_curso.php?id=' + cursoId + '" class="btn btn-primary btn-sm"><i class="bi bi-play-circle me-1"></i>Continuar</a>';
+                }
+            } else {
+                footer.innerHTML = '<form method="POST" class="d-inline"><input type="hidden" name="curso_id" value="' + cursoId + '"><button type="submit" name="inscribirse" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Inscribirse</button></form>';
+            }
+
+            overlay.removeAttribute('inert');
+            overlay.setAttribute('aria-hidden', 'false');
+            overlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            setTimeout(function() { if (closeBtn) closeBtn.focus(); }, 50);
         }
 
-        overlay.removeAttribute('inert');
-        overlay.setAttribute('aria-hidden', 'false');
-        overlay.classList.add('active');
-        document.body.style.overflow = 'hidden';
-        setTimeout(function() { if (closeBtn) closeBtn.focus(); }, 50);
-    }
-
-    function closeFullscreen() {
-        if (!overlay) return;
-        if (lastFocusedBlock && lastFocusedBlock.offsetParent !== null) {
-            lastFocusedBlock.focus();
+        function closeFullscreen() {
+            if (!overlay) return;
+            if (lastFocusedBlock && lastFocusedBlock.offsetParent !== null) {
+                lastFocusedBlock.focus();
+            }
+            overlay.classList.remove('active');
+            overlay.setAttribute('aria-hidden', 'true');
+            overlay.setAttribute('inert', '');
+            document.body.style.overflow = '';
         }
-        overlay.classList.remove('active');
-        overlay.setAttribute('aria-hidden', 'true');
-        overlay.setAttribute('inert', '');
-        document.body.style.overflow = '';
-    }
 
-    if (grid) {
-        grid.querySelectorAll('.curso-block').forEach(function(block) {
-            block.addEventListener('click', function(e) {
-                if (e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
-                openFullscreen(block);
+        if (grid) {
+            grid.querySelectorAll('.curso-block').forEach(function(block) {
+                block.addEventListener('click', function(e) {
+                    if (e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+                    openFullscreen(block);
+                });
+                block.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFullscreen(block); } });
             });
-            block.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFullscreen(block); } });
-        });
-    }
-    if (closeBtn) closeBtn.addEventListener('click', closeFullscreen);
-    if (backdrop) backdrop.addEventListener('click', closeFullscreen);
-    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeFullscreen(); });
+        }
+        if (closeBtn) closeBtn.addEventListener('click', closeFullscreen);
+        if (backdrop) backdrop.addEventListener('click', closeFullscreen);
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeFullscreen(); });
 
-    initGridPagination({ grid: '#cursosGrid', paginationWrap: '#cursosPagination' });
-});
+        if (typeof initGridPagination === 'function') {
+            initGridPagination({ grid: '#cursosGrid', paginationWrap: '#cursosPagination' });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initCursosPage);
+    } else {
+        initCursosPage();
+    }
+})();
 </script>
 <?php endif; ?>
 
