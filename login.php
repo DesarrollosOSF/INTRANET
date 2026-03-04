@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo = getDBConnection();
             $stmt = $pdo->prepare("
-                SELECT u.id, u.nombre_completo, u.email, u.password, u.activo, r.nombre as rol
+                SELECT u.id, u.nombre_completo, u.email, u.password, u.activo, u.rol_id, r.nombre as rol
                 FROM usuarios u
                 INNER JOIN roles r ON u.rol_id = r.id
                 WHERE u.email = ?
@@ -55,6 +55,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($usuario['activo'] == 1) {
                     // Limpiar intentos fallidos al iniciar sesión correctamente
                     limpiarIntentosFallidosLogin($email);
+                    // Asegurar que el usuario tenga perfil asignado (para que los permisos apliquen)
+                    $stmtCheck = $pdo->prepare("SELECT COUNT(*) as n FROM usuario_perfiles WHERE usuario_id = ?");
+                    $stmtCheck->execute([$usuario['id']]);
+                    if ((int)$stmtCheck->fetch()['n'] === 0) {
+                        $stmtIns = $pdo->prepare("INSERT INTO usuario_perfiles (usuario_id, perfil_id) VALUES (?, ?)");
+                        $stmtIns->execute([$usuario['id'], (int)$usuario['rol_id']]);
+                    }
                     // Iniciar sesión
                     $_SESSION['usuario_id'] = $usuario['id'];
                     $_SESSION['nombre_completo'] = $usuario['nombre_completo'];

@@ -280,83 +280,96 @@ document.getElementById('modalCurso').addEventListener('hidden.bs.modal', functi
 });
 
 <?php if (!empty($cursos)): ?>
-document.addEventListener('DOMContentLoaded', function() {
-    var grid = document.getElementById('cursosGestionGrid');
-    var overlay = document.getElementById('cursoGestionFullscreen');
-    var closeBtn = document.getElementById('cursoGestionFullscreenClose');
-    var backdrop = overlay ? overlay.querySelector('.curso-fullscreen-backdrop') : null;
-    var lastFocusedBlock = null;
+(function() {
+    function initCursosGestionPage() {
+        var grid = document.getElementById('cursosGestionGrid');
+        var overlay = document.getElementById('cursoGestionFullscreen');
+        var closeBtn = document.getElementById('cursoGestionFullscreenClose');
+        var backdrop = overlay ? overlay.querySelector('.curso-fullscreen-backdrop') : null;
+        var lastFocusedBlock = null;
 
-    function openFullscreen(block) {
-        if (!overlay) return;
-        lastFocusedBlock = block;
-        var nombre = block.getAttribute('data-nombre') || '';
-        var descripcion = block.getAttribute('data-descripcion') || '';
-        var imagen = block.getAttribute('data-imagen') || '';
-        var dependencia = block.getAttribute('data-dependencia') || '';
-        var cursoId = block.getAttribute('data-curso-id') || '';
-        var activo = block.getAttribute('data-activo') === '1';
+        function openFullscreen(block) {
+            if (!overlay) return;
+            lastFocusedBlock = block;
+            var nombre = block.getAttribute('data-nombre') || '';
+            var descripcion = block.getAttribute('data-descripcion') || '';
+            var imagen = block.getAttribute('data-imagen') || '';
+            var dependencia = block.getAttribute('data-dependencia') || '';
+            var cursoId = block.getAttribute('data-curso-id') || '';
+            var activo = block.getAttribute('data-activo') === '1';
 
-        document.getElementById('cursoGestionFullscreenTitulo').textContent = nombre;
-        document.getElementById('cursoGestionFullscreenDependencia').innerHTML = '<i class="bi bi-diagram-3 me-1"></i>' + dependencia.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        var body = document.getElementById('cursoGestionFullscreenBody');
-        var footer = document.getElementById('cursoGestionFullscreenFooter');
+            document.getElementById('cursoGestionFullscreenTitulo').textContent = nombre;
+            document.getElementById('cursoGestionFullscreenDependencia').innerHTML = '<i class="bi bi-diagram-3 me-1"></i>' + dependencia.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            var body = document.getElementById('cursoGestionFullscreenBody');
+            var footer = document.getElementById('cursoGestionFullscreenFooter');
 
-        if (imagen) {
-            body.innerHTML = '<img src="' + imagen.replace(/"/g, '&quot;') + '" alt="' + nombre.replace(/"/g, '&quot;') + '" class="curso-fullscreen-imagen">';
-        } else {
-            body.innerHTML = '<div class="curso-fullscreen-sin-imagen"><i class="bi bi-book"></i></div>';
-        }
-        body.innerHTML += '<div class="curso-fullscreen-descripcion"><p>' + (descripcion || 'Sin descripción.').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</p></div>';
-
-        footer.innerHTML = '<span class="badge bg-' + (activo ? 'success' : 'secondary') + ' me-2">' + (activo ? 'Activo' : 'Inactivo') + '</span>' +
-            '<a href="cursos_detalle.php?id=' + cursoId + '" class="btn btn-primary btn-sm me-2"><i class="bi bi-gear me-1"></i>Gestionar</a>' +
-            '<button type="button" class="btn btn-warning btn-sm" id="btnEditarDesdeFullscreen"><i class="bi bi-pencil me-1"></i>Editar</button>';
-
-        document.getElementById('btnEditarDesdeFullscreen').addEventListener('click', function() {
-            var json = lastFocusedBlock.getAttribute('data-curso-json');
-            if (json) {
-                try {
-                    var curso = JSON.parse(json);
-                    closeFullscreen();
-                    editarCurso(curso);
-                } catch (e) {}
+            if (imagen) {
+                body.innerHTML = '<img src="' + imagen.replace(/"/g, '&quot;') + '" alt="' + nombre.replace(/"/g, '&quot;') + '" class="curso-fullscreen-imagen">';
+            } else {
+                body.innerHTML = '<div class="curso-fullscreen-sin-imagen"><i class="bi bi-book"></i></div>';
             }
-        });
+            body.innerHTML += '<div class="curso-fullscreen-descripcion"><p>' + (descripcion || 'Sin descripción.').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</p></div>';
 
-        overlay.removeAttribute('inert');
-        overlay.setAttribute('aria-hidden', 'false');
-        overlay.classList.add('active');
-        document.body.style.overflow = 'hidden';
-        setTimeout(function() { if (closeBtn) closeBtn.focus(); }, 50);
-    }
+            footer.innerHTML = '<span class="badge bg-' + (activo ? 'success' : 'secondary') + ' me-2">' + (activo ? 'Activo' : 'Inactivo') + '</span>' +
+                '<a href="cursos_detalle.php?id=' + cursoId + '" class="btn btn-primary btn-sm me-2"><i class="bi bi-gear me-1"></i>Gestionar</a>' +
+                '<button type="button" class="btn btn-warning btn-sm" id="btnEditarDesdeFullscreen"><i class="bi bi-pencil me-1"></i>Editar</button>';
 
-    function closeFullscreen() {
-        if (!overlay) return;
-        if (lastFocusedBlock && lastFocusedBlock.offsetParent !== null) {
-            lastFocusedBlock.focus();
+            var btnEditar = document.getElementById('btnEditarDesdeFullscreen');
+            if (btnEditar) {
+                btnEditar.addEventListener('click', function() {
+                    var json = lastFocusedBlock.getAttribute('data-curso-json');
+                    if (json) {
+                        try {
+                            var curso = JSON.parse(json);
+                            closeFullscreen();
+                            editarCurso(curso);
+                        } catch (e) {}
+                    }
+                });
+            }
+
+            overlay.removeAttribute('inert');
+            overlay.setAttribute('aria-hidden', 'false');
+            overlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            setTimeout(function() { if (closeBtn) closeBtn.focus(); }, 50);
         }
-        overlay.classList.remove('active');
-        overlay.setAttribute('aria-hidden', 'true');
-        overlay.setAttribute('inert', '');
-        document.body.style.overflow = '';
-    }
 
-    if (grid) {
-        grid.querySelectorAll('.curso-block').forEach(function(block) {
-            block.addEventListener('click', function(e) {
-                if (e.target.closest('a') || e.target.closest('button')) return;
-                openFullscreen(block);
+        function closeFullscreen() {
+            if (!overlay) return;
+            if (lastFocusedBlock && lastFocusedBlock.offsetParent !== null) {
+                lastFocusedBlock.focus();
+            }
+            overlay.classList.remove('active');
+            overlay.setAttribute('aria-hidden', 'true');
+            overlay.setAttribute('inert', '');
+            document.body.style.overflow = '';
+        }
+
+        if (grid) {
+            grid.querySelectorAll('.curso-block').forEach(function(block) {
+                block.addEventListener('click', function(e) {
+                    if (e.target.closest('a') || e.target.closest('button')) return;
+                    openFullscreen(block);
+                });
+                block.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFullscreen(block); } });
             });
-            block.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFullscreen(block); } });
-        });
-    }
-    if (closeBtn) closeBtn.addEventListener('click', closeFullscreen);
-    if (backdrop) backdrop.addEventListener('click', closeFullscreen);
-    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeFullscreen(); });
+        }
+        if (closeBtn) closeBtn.addEventListener('click', closeFullscreen);
+        if (backdrop) backdrop.addEventListener('click', closeFullscreen);
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeFullscreen(); });
 
-    initGridPagination({ grid: '#cursosGestionGrid', paginationWrap: '#cursosGestionPagination' });
-});
+        if (typeof initGridPagination === 'function') {
+            initGridPagination({ grid: '#cursosGestionGrid', paginationWrap: '#cursosGestionPagination' });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initCursosGestionPage);
+    } else {
+        initCursosGestionPage();
+    }
+})();
 <?php endif; ?>
 </script>
 

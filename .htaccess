@@ -18,9 +18,9 @@ RewriteRule ^favicon\.ico$ img/LogoRecortado1.png [L]
     Deny from all
 </FilesMatch>
 
-# Configuración de PHP
-php_value upload_max_filesize 10M
-php_value post_max_size 10M
+# Configuración de PHP (videos pueden ser mayores; post_max_size debe ser >= upload_max_filesize)
+php_value upload_max_filesize 100M
+php_value post_max_size 101M
 php_value max_execution_time 300
 php_value max_input_time 300
 

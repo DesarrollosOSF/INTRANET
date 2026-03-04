@@ -112,7 +112,7 @@ if ($perfil_seleccionado > 0) {
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="permiso_id[]" value="<?php echo $permiso_id; ?>" id="perm_<?php echo $permiso_id; ?>" <?php echo $marcado ? 'checked' : ''; ?>>
                                 <label class="form-check-label" for="perm_<?php echo $permiso_id; ?>">
-                                    <?php echo htmlspecialchars($perm['nombre']); ?>
+                                    <?php echo htmlspecialchars(etiquetaPermiso($perm['nombre'])); ?>
                                     <?php if (!empty($perm['descripcion'])): ?>
                                         <br><span class="text-muted small"><?php echo htmlspecialchars($perm['descripcion']); ?></span>
                                     <?php endif; ?>

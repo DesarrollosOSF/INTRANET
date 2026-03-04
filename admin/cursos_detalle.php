@@ -34,6 +34,11 @@ $tipo_mensaje = '';
 
 // Procesar acciones
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Si PHP rechazó el body por superar post_max_size, $_POST y $_FILES llegan vacíos
+    if (empty($_POST) && empty($_FILES)) {
+        $mensaje = 'El archivo supera el límite permitido (máx. 100 MB para videos). Reduzca el tamaño del archivo e intente de nuevo.';
+        $tipo_mensaje = 'danger';
+    }
     $accion = $_POST['accion'] ?? '';
     
     if ($accion === 'agregar_modulo') {
@@ -92,8 +97,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $archivo = null;
         if (isset($_FILES['archivo']) && $_FILES['archivo']['error'] === UPLOAD_ERR_OK) {
-            $es_imagen = ($tipo === 'imagen');
-            $validacion = validarTamanoSubida((int)$_FILES['archivo']['size'], $es_imagen ? 'imagen' : 'documento');
+            $tipo_validacion = ($tipo === 'imagen') ? 'imagen' : (($tipo === 'video') ? 'video' : 'documento');
+            $validacion = validarTamanoSubida((int)$_FILES['archivo']['size'], $tipo_validacion);
             if (!$validacion['valido']) {
                 $mensaje = $validacion['mensaje'];
                 $tipo_mensaje = 'danger';
@@ -452,9 +457,9 @@ document.getElementById('tipoMaterial').addEventListener('change', function() {
     var tipo = this.value;
     var archivoInput = document.getElementById('archivoMaterial');
     var helpText = document.getElementById('archivoHelp');
-    if (tipo === 'video') { archivoInput.setAttribute('accept', 'video/*'); helpText.textContent = 'Formatos: MP4, WebM, OGG'; }
-    else if (tipo === 'pdf') { archivoInput.setAttribute('accept', 'application/pdf'); helpText.textContent = 'Formato: PDF'; }
-    else if (tipo === 'imagen') { archivoInput.setAttribute('accept', 'image/*'); helpText.textContent = 'Formatos: JPG, PNG, GIF, WEBP'; }
+    if (tipo === 'video') { archivoInput.setAttribute('accept', 'video/*'); helpText.textContent = 'Formatos: MP4, WebM, OGG. Tamaño máximo: 100 MB.'; }
+    else if (tipo === 'pdf') { archivoInput.setAttribute('accept', 'application/pdf'); helpText.textContent = 'Formato: PDF. Máx. 10 MB.'; }
+    else if (tipo === 'imagen') { archivoInput.setAttribute('accept', 'image/*'); helpText.textContent = 'Formatos: JPG, PNG, GIF, WEBP. Máx. 10 MB.'; }
     else { archivoInput.removeAttribute('accept'); helpText.textContent = ''; }
 });
 </script>
