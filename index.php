@@ -186,12 +186,16 @@ try {
     </div>
 
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    function initDashboardComunicados() {
         var grid = document.getElementById('comunicadosGrid');
         var overlay = document.getElementById('comunicadoFullscreen');
         var closeBtn = document.getElementById('comunicadoFullscreenClose');
         var backdrop = overlay ? overlay.querySelector('.comunicado-fullscreen-backdrop') : null;
         var lastFocusedBlock = null;
+
+        function escHtml(str) {
+            return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '<br>');
+        }
 
         function openFullscreen(block) {
             if (!overlay) return;
@@ -201,7 +205,7 @@ try {
             var url = block.getAttribute('data-url') || '';
             var esPdf = block.getAttribute('data-pdf') === '1';
             var rawEl = block.querySelector('.comunicado-block-raw-contenido');
-            var contenido = rawEl ? rawEl.textContent : '';
+            var contenido = rawEl ? rawEl.textContent.trim() : '';
 
             document.getElementById('comunicadoFullscreenTitulo').textContent = titulo;
             document.getElementById('comunicadoFullscreenFecha').textContent = fecha;
@@ -211,15 +215,23 @@ try {
             footer.innerHTML = '';
 
             if (url) {
+                var mediaHtml = '';
                 if (esPdf) {
-                    body.innerHTML = '<iframe src="' + url.replace(/"/g, '&quot;') + '#toolbar=0" class="comunicado-contenido-full" title="' + titulo.replace(/"/g, '&quot;') + '"></iframe>';
+                    mediaHtml = '<iframe src="' + url.replace(/"/g, '&quot;') + '#toolbar=0" class="comunicado-contenido-full" title="' + titulo.replace(/"/g, '&quot;') + '"></iframe>';
                     footer.innerHTML = '<a href="' + url.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir en nueva pestaña</a>';
                 } else {
-                    body.innerHTML = '<img src="' + url.replace(/"/g, '&quot;') + '" alt="' + titulo.replace(/"/g, '&quot;') + '" class="comunicado-contenido-full comunicado-imagen-full">';
+                    mediaHtml = '<img src="' + url.replace(/"/g, '&quot;') + '" alt="' + titulo.replace(/"/g, '&quot;') + '" class="comunicado-contenido-full comunicado-imagen-full">';
+                }
+                if (contenido) {
+                    body.className = 'comunicado-fullscreen-body comunicado-fullscreen-body-dos-columnas';
+                    body.innerHTML = '<div class="comunicado-fullscreen-col comunicado-fullscreen-col-media">' + mediaHtml + '</div><div class="comunicado-fullscreen-col comunicado-fullscreen-col-contenido"><div class="comunicado-contenido-label">Contenido</div><div class="comunicado-contenido-texto p-4">' + escHtml(contenido) + '</div></div>';
+                } else {
+                    body.className = 'comunicado-fullscreen-body';
+                    body.innerHTML = mediaHtml;
                 }
             } else {
-                var esc = contenido.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '<br>');
-                body.innerHTML = '<div class="comunicado-solo-texto p-4"><p class="text-muted">' + esc + '</p></div>';
+                body.className = 'comunicado-fullscreen-body';
+                body.innerHTML = '<div class="comunicado-solo-texto p-4"><p class="text-muted mb-0">' + escHtml(contenido) + '</p></div>';
             }
 
             overlay.removeAttribute('inert');
@@ -250,8 +262,16 @@ try {
         if (backdrop) backdrop.addEventListener('click', closeFullscreen);
         document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeFullscreen(); });
 
-        initGridPagination({ grid: '#comunicadosGrid', paginationWrap: '#comunicadosPagination' });
-    });
+        if (typeof initGridPagination === 'function') {
+            initGridPagination({ grid: '#comunicadosGrid', paginationWrap: '#comunicadosPagination' });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initDashboardComunicados);
+    } else {
+        initDashboardComunicados();
+    }
     </script>
     
 </div>
