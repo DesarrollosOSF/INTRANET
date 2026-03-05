@@ -46,8 +46,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['perfil_id'])) {
 // Perfil seleccionado (GET o POST para recargar, o primer perfil)
 $perfil_seleccionado = isset($_GET['perfil_id']) ? (int)$_GET['perfil_id'] : (isset($_POST['perfil_id']) ? (int)$_POST['perfil_id'] : 0);
 
-$perfiles = $pdo->query("SELECT * FROM perfiles ORDER BY id")->fetchAll();
-$permisos = $pdo->query("SELECT * FROM permisos ORDER BY nombre")->fetchAll();
+$perfiles = [];
+$permisos = [];
+$error_permisos = null;
+try {
+    $perfiles = $pdo->query("SELECT * FROM perfiles ORDER BY id")->fetchAll();
+    $permisos = $pdo->query("SELECT * FROM permisos ORDER BY nombre")->fetchAll();
+} catch (PDOException $e) {
+    $error_permisos = 'No se pudo cargar la lista de permisos. Compruebe que las tablas <code>perfiles</code> y <code>permisos</code> existan en la base de datos.';
+    error_log("Perfiles/permisos: " . $e->getMessage());
+}
 
 // Si hay perfiles y no hay selección, usar el primero
 if (!empty($perfiles) && $perfil_seleccionado === 0) {
@@ -99,7 +107,17 @@ if ($perfil_seleccionado > 0) {
                 <?php endif; ?>
             </form>
             
-            <?php if ($perfil_seleccionado > 0): ?>
+            <?php if ($error_permisos): ?>
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i><?php echo $error_permisos; ?>
+                </div>
+            <?php elseif ($perfil_seleccionado > 0 && empty($permisos)): ?>
+                <div class="alert alert-warning">
+                    <i class="bi bi-info-circle me-2"></i><strong>No hay permisos definidos en la base de datos.</strong><br>
+                    En el servidor de producción la tabla <code>permisos</code> está vacía. Ejecute en la base de datos el script
+                    <code>docs/permisos_completos.sql</code> (desde phpMyAdmin o su cliente MySQL) y recargue esta página.
+                </div>
+            <?php elseif ($perfil_seleccionado > 0): ?>
             <form method="post" action="">
                 <input type="hidden" name="perfil_id" value="<?php echo $perfil_seleccionado; ?>">
                 <p class="text-muted mb-3">Marque los permisos que tendrá este perfil.</p>
@@ -128,7 +146,8 @@ if ($perfil_seleccionado > 0) {
                     <a href="<?php echo BASE_URL; ?>admin/usuarios.php" class="btn btn-outline-secondary ms-2">Volver a Usuarios</a>
                 </div>
             </form>
-            <?php else: ?>
+            <?php endif; ?>
+            <?php if ($perfil_seleccionado === 0): ?>
                 <p class="text-muted">No hay perfiles definidos.</p>
             <?php endif; ?>
         </div>

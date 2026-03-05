@@ -31,10 +31,11 @@ define('BASE_PATH', __DIR__ . '/../');
 define('UPLOAD_PATH', BASE_PATH . 'uploads/');
 define('UPLOAD_URL', BASE_URL . 'uploads/');
 
-// Configuración de archivos y límites de tamaño (10 MB para todos: PDF, video, imagen)
-define('MAX_FILE_SIZE', 10 * 1024 * 1024);   // 10MB límite genérico
-define('MAX_IMAGE_SIZE', 10 * 1024 * 1024);  // 10MB para imágenes
-define('MAX_DOCUMENT_SIZE', 10 * 1024 * 1024); // 10MB para documentos/PDFs/videos
+// Configuración de archivos y límites de tamaño
+define('MAX_FILE_SIZE', 10 * 1024 * 1024);    // 10MB límite genérico
+define('MAX_IMAGE_SIZE', 10 * 1024 * 1024);   // 10MB para imágenes
+define('MAX_DOCUMENT_SIZE', 10 * 1024 * 1024); // 10MB para documentos/PDFs
+define('MAX_VIDEO_SIZE', 100 * 1024 * 1024);  // 100MB para videos en materiales de curso
 define('ALLOWED_VIDEO_TYPES', ['video/mp4', 'video/webm', 'video/ogg']);
 define('ALLOWED_IMAGE_TYPES', ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 define('ALLOWED_DOCUMENT_TYPES', ['application/pdf']);
@@ -72,6 +73,38 @@ function registrarLog($usuario_id, $accion, $modulo = null, $detalles = null) {
     }
 }
 
+/**
+ * Devuelve los posibles valores de permisos.nombre que se consideran equivalentes al slug usado en código.
+ * Así la BD puede tener "Gestionar Cursos" y el código usa 'gestionar_cursos'.
+ */
+function nombresPermisoParaSlug($slug) {
+    static $variantes = [
+        'gestionar_usuarios'           => ['gestionar_usuarios', 'Gestionar Usuarios', 'Gestionar usuarios'],
+        'gestionar_perfiles_permisos' => ['gestionar_perfiles_permisos', 'Gestionar Perfiles y Permisos', 'Gestionar perfiles y permisos'],
+        'gestionar_cursos'            => ['gestionar_cursos', 'Gestionar Cursos', 'Gestionar cursos'],
+        'gestionar_comunicados'        => ['gestionar_comunicados', 'Gestionar Comunicados', 'Gestionar comunicados'],
+        'gestionar_dependencias'       => ['gestionar_dependencias', 'Gestionar Dependencias', 'Gestionar dependencias'],
+        'gestionar_documentos_interes' => ['gestionar_documentos_interes', 'Gestionar Documentos de Interés', 'Gestionar Documentos Interés', 'Gestionar documentos de interés'],
+        'ver_reportes'                => ['ver_reportes', 'Ver Reportes', 'Ver reportes'],
+        'ver_cursos'                  => ['ver_cursos', 'Ver Cursos', 'Ver cursos'],
+        'ver_datos_interes'            => ['ver_datos_interes', 'Ver Datos de Interés', 'Ver datos de interés'],
+        'ver_documentos_interes'      => ['ver_documentos_interes', 'Ver Documentos de Interés', 'Ver Documentos de interés'],
+        'ver_dashboard'               => ['ver_dashboard', 'Ver Dashboard', 'Ver dashboard'],
+        'presentar_evaluaciones'      => ['presentar_evaluaciones', 'Presentar Evaluaciones', 'Presentar evaluaciones'],
+        'ver_documentos'              => ['ver_documentos', 'Ver Documentos', 'Ver documentos'],
+        'inscribirse_cursos'          => ['inscribirse_cursos', 'Inscribirse Cursos', 'Inscribirse cursos'],
+    ];
+    return $variantes[$slug] ?? [$slug];
+}
+
+/** Convierte nombre de permiso (slug o legible) a etiqueta para mostrar en pantalla. */
+function etiquetaPermiso($nombre) {
+    if (strpos($nombre, '_') !== false) {
+        return ucwords(str_replace('_', ' ', $nombre));
+    }
+    return $nombre;
+}
+
 // Función para verificar permisos
 function tienePermiso($permiso_nombre) {
     if (!isset($_SESSION['usuario_id'])) {
@@ -85,18 +118,36 @@ function tienePermiso($permiso_nombre) {
     
     try {
         $pdo = getDBConnection();
+        $nombres = nombresPermisoParaSlug($permiso_nombre);
+        $placeholders = implode(',', array_fill(0, count($nombres), '?'));
         $stmt = $pdo->prepare("
             SELECT COUNT(*) as tiene
             FROM usuario_perfiles up
             INNER JOIN perfil_permisos pp ON up.perfil_id = pp.perfil_id
             INNER JOIN permisos p ON pp.permiso_id = p.id
-            WHERE up.usuario_id = ? AND p.nombre = ?
+            WHERE up.usuario_id = ? AND p.nombre IN ($placeholders)
         ");
-        
-        $stmt->execute([$_SESSION['usuario_id'], $permiso_nombre]);
+        $params = array_merge([$_SESSION['usuario_id']], $nombres);
+        $stmt->execute($params);
         $result = $stmt->fetch();
         
-        return $result['tiene'] > 0;
+        if ($result['tiene'] > 0) {
+            return true;
+        }
+        
+        // Usuarios legacy: tienen rol pero no tienen perfiles asignados (usuario_perfiles vacío).
+        // Se les permite acceso básico al dashboard, cursos y evaluaciones para no bloquearlos.
+        $permisos_legacy = ['ver_dashboard', 'ver_cursos', 'presentar_evaluaciones'];
+        if (in_array($permiso_nombre, $permisos_legacy, true)) {
+            $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM usuario_perfiles WHERE usuario_id = ?");
+            $stmt->execute([$_SESSION['usuario_id']]);
+            $row = $stmt->fetch();
+            if ((int)$row['total'] === 0) {
+                return true;
+            }
+        }
+        
+        return false;
     } catch (Exception $e) {
         error_log("Error al verificar permiso: " . $e->getMessage());
         return false;
@@ -261,11 +312,17 @@ function sanitizar($data) {
 /**
  * Valida el tamaño de un archivo subido según el tipo.
  * @param int $size_bytes Tamaño en bytes ($_FILES['campo']['size'])
- * @param string $tipo 'imagen' o 'documento' (10MB máx para ambos: PDFs, videos, imágenes)
+ * @param string $tipo 'imagen', 'documento' o 'video'
  * @return array ['valido' => bool, 'mensaje' => string]
  */
 function validarTamanoSubida($size_bytes, $tipo = 'imagen') {
-    $limite = ($tipo === 'documento') ? MAX_DOCUMENT_SIZE : MAX_IMAGE_SIZE;
+    if ($tipo === 'video') {
+        $limite = MAX_VIDEO_SIZE;
+    } elseif ($tipo === 'documento') {
+        $limite = MAX_DOCUMENT_SIZE;
+    } else {
+        $limite = MAX_IMAGE_SIZE;
+    }
     $limite_mb = $limite / (1024 * 1024);
     if ($size_bytes > $limite) {
         return ['valido' => false, 'mensaje' => "El archivo supera el tamaño máximo permitido ({$limite_mb}MB)."];

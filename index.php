@@ -1,6 +1,7 @@
 <?php
 require_once 'config/config.php';
-requerirPermiso('ver_dashboard');
+// Cualquier usuario autenticado puede ver el dashboard; el resto de secciones validan permisos por perfil
+requerirAutenticacion();
 
 $page_title = 'Dashboard';
 $additional_css = ['assets/css/dashboard.css'];
