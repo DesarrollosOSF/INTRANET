@@ -469,16 +469,24 @@
     padding: 1rem 1.25rem;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+    display: flow;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
 }
 
 .comunicado-fullscreen-header h4 {
     margin: 0;
     font-size: 1.15rem;
+}
+
+.comunicado-fullscreen-header .comunicado-fullscreen-fecha {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.9rem;
+}
+
+.comunicado-fullscreen-header .comunicado-fullscreen-fecha .text-muted {
+    color: rgba(255, 255, 255, 0.75) !important;
 }
 
 .comunicado-fullscreen-body {

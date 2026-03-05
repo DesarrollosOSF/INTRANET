@@ -177,8 +177,8 @@ try {
                 <i class="bi bi-x-lg"></i>
             </button>
             <div class="comunicado-fullscreen-header">
-                <h4 id="comunicadoFullscreenTitulo"></h4>
-                <span id="comunicadoFullscreenFecha"></span>
+                <h4 id="comunicadoFullscreenTitulo" class="mb-1"></h4>
+                <p class="comunicado-fullscreen-fecha mb-0"><span class="text-muted fw-normal">Fecha de Publicación:</span> <span id="comunicadoFullscreenFecha"></span></p>
             </div>
             <div class="comunicado-fullscreen-body" id="comunicadoFullscreenBody"></div>
             <div class="comunicado-fullscreen-footer" id="comunicadoFullscreenFooter"></div>
@@ -208,7 +208,7 @@ try {
             var contenido = rawEl ? rawEl.textContent.trim() : '';
 
             document.getElementById('comunicadoFullscreenTitulo').textContent = titulo;
-            document.getElementById('comunicadoFullscreenFecha').textContent = fecha;
+            document.getElementById('comunicadoFullscreenFecha').textContent = fecha || '';
             var body = document.getElementById('comunicadoFullscreenBody');
             var footer = document.getElementById('comunicadoFullscreenFooter');
             body.innerHTML = '';
