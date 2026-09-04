@@ -11,6 +11,10 @@ $tipo_mensaje = '';
 
 // Procesar acciones
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (subidaRechazadaPorLimiteServidor()) {
+        $mensaje = mensajeLimiteSubidaServidor('video');
+        $tipo_mensaje = 'danger';
+    }
     $accion = $_POST['accion'] ?? '';
     
     if ($accion === 'crear_comunicado' || $accion === 'editar_comunicado') {
@@ -24,24 +28,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $imagen = null;
         $error_subida_archivo = false;
-        $extensiones_permitidas = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'];
-        if (isset($_FILES['imagen']) && $_FILES['imagen']['error'] === UPLOAD_ERR_OK) {
-            $ext = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
-            $es_documento = ($ext === 'pdf');
-            $validacion = validarTamanoSubida((int)$_FILES['imagen']['size'], $es_documento ? 'documento' : 'imagen');
-            if (!$validacion['valido']) {
-                $mensaje = $validacion['mensaje'];
+        $extensiones_permitidas = array_merge(['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'], ALLOWED_VIDEO_EXT);
+        $archivo_adjunto_solicitado = isset($_FILES['imagen']) && (int) $_FILES['imagen']['error'] !== UPLOAD_ERR_NO_FILE;
+
+        if ($archivo_adjunto_solicitado) {
+            if ($_FILES['imagen']['error'] !== UPLOAD_ERR_OK) {
+                $mensaje = mensajeErrorSubidaPhp($_FILES['imagen']['error']);
                 $tipo_mensaje = 'danger';
                 $error_subida_archivo = true;
-            } elseif (in_array($ext, $extensiones_permitidas)) {
-                $upload_dir = BASE_PATH . 'uploads/comunicados/';
-                if (!is_dir($upload_dir)) {
-                    mkdir($upload_dir, 0755, true);
+            } else {
+                $ext = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
+                $es_video = in_array($ext, ALLOWED_VIDEO_EXT, true);
+                $es_documento = ($ext === 'pdf');
+                $tipo_tamano = $es_video ? 'video' : ($es_documento ? 'documento' : 'imagen');
+                $validacion = validarTamanoSubida((int) $_FILES['imagen']['size'], $tipo_tamano);
+                if (!$validacion['valido']) {
+                    $mensaje = $validacion['mensaje'];
+                    $tipo_mensaje = 'danger';
+                    $error_subida_archivo = true;
+                } elseif (!in_array($ext, $extensiones_permitidas, true)) {
+                    $mensaje = 'Formato no permitido. Use imagen, PDF o video (MP4, WebM, OGG).';
+                    $tipo_mensaje = 'danger';
+                    $error_subida_archivo = true;
+                } elseif ($es_video) {
+                    $mime = mimeArchivoSubido($_FILES['imagen']['tmp_name'], $_FILES['imagen']['name']);
+                    if (!in_array($mime, ALLOWED_VIDEO_MIMES, true)) {
+                        $mensaje = 'Tipo de video no reconocido (' . $mime . '). Use MP4, WebM u OGG.';
+                        $tipo_mensaje = 'danger';
+                        $error_subida_archivo = true;
+                    }
                 }
-                $imagen_nombre = uniqid() . '.' . $ext;
-                $imagen_path = $upload_dir . $imagen_nombre;
-                if (move_uploaded_file($_FILES['imagen']['tmp_name'], $imagen_path)) {
-                    $imagen = 'comunicados/' . $imagen_nombre;
+                if (!$error_subida_archivo) {
+                    $upload_dir = BASE_PATH . 'uploads/comunicados/';
+                    if (!is_dir($upload_dir)) {
+                        mkdir($upload_dir, 0755, true);
+                    }
+                    $imagen_nombre = uniqid() . '.' . $ext;
+                    $imagen_path = $upload_dir . $imagen_nombre;
+                    if (move_uploaded_file($_FILES['imagen']['tmp_name'], $imagen_path)) {
+                        $imagen = 'comunicados/' . $imagen_nombre;
+                    } else {
+                        $mensaje = 'Error al guardar el archivo en el servidor. Revise permisos de uploads/comunicados/.';
+                        $tipo_mensaje = 'danger';
+                        $error_subida_archivo = true;
+                    }
                 }
             }
         }
@@ -108,6 +138,7 @@ $offset = ($pagina_actual - 1) * $filas_por_pagina;
 $stmt = $pdo->prepare("SELECT * FROM comunicados ORDER BY fecha_publicacion DESC LIMIT ? OFFSET ?");
 $stmt->execute([$filas_por_pagina, $offset]);
 $todos_comunicados = $stmt->fetchAll();
+$max_video_mb = (int) ceil(MAX_VIDEO_SIZE / (1024 * 1024));
 
 require_once '../includes/header.php';
 ?>
@@ -234,9 +265,9 @@ require_once '../includes/header.php';
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Imagen o documento PDF (opcional)</label>
-                        <input type="file" class="form-control" name="imagen" id="imagenComunicado" accept="image/*,application/pdf">
-                        <small class="text-muted">Formatos: JPG, PNG, GIF, WEBP, PDF</small>
+                        <label class="form-label">Imagen, PDF o video (opcional)</label>
+                        <input type="file" class="form-control" name="imagen" id="imagenComunicado" accept="image/*,application/pdf,.mp4,.webm,.ogg,video/mp4,video/webm,video/ogg">
+                        <small class="text-muted">Formatos: JPG, PNG, GIF, WEBP, PDF, MP4, WebM, OGG. Videos hasta <?php echo $max_video_mb; ?> MB.</small>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">

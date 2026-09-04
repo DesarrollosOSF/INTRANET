@@ -25,6 +25,7 @@ if (!$dependencia) {
 
 $upload_dir = rtrim(UPLOAD_PATH_DOCUMENTOS_INTERES, '/\\') . DIRECTORY_SEPARATOR;
 $max_size = MAX_DOCUMENT_SIZE;
+$max_documento_mb = (int) ceil($max_size / (1024 * 1024));
 $ext_permitidas = ALLOWED_DOCUMENTOS_INTERES_EXT;
 $mimes_permitidos = ALLOWED_DOCUMENTOS_INTERES_MIMES;
 if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
@@ -106,10 +107,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!in_array($ext, $ext_permitidas) || !in_array($mime, $mimes_permitidos)) {
                     $mensaje = 'Tipo no permitido. Use PDF, Word o Excel.';
                     $tipo_mensaje = 'danger';
-                } elseif ($_FILES['archivo']['size'] > $max_size) {
-                    $mensaje = 'Archivo supera 10 MB.';
-                    $tipo_mensaje = 'danger';
-                } else {
+            } elseif ($_FILES['archivo']['size'] > $max_size) {
+                $mensaje = 'Archivo supera ' . $max_documento_mb . ' MB.';
+                $tipo_mensaje = 'danger';
+            } else {
                     $archivo_nombre = uniqid() . '.' . $ext;
                     if (move_uploaded_file($_FILES['archivo']['tmp_name'], $upload_dir . $archivo_nombre)) {
                         try {
@@ -352,8 +353,8 @@ foreach ($documentos as $doc) {
         <div class="col-md-4">
             <div class="card shadow-sm">
                 <div class="card-header"><h5 class="mb-0">Información</h5></div>
-                <div class="card-body small">
-                    <p>Tipos permitidos: PDF, Word (.doc, .docx), Excel (.xls, .xlsx). Máx. 10 MB.</p>
+                    <div class="card-body small">
+                    <p>Tipos permitidos: PDF, Word (.doc, .docx), Excel (.xls, .xlsx). Máx. <?php echo $max_documento_mb; ?> MB.</p>
                     <p>El nombre del documento debe ser único dentro de esta dependencia.</p>
                     <p class="mb-0">Al editar puede reemplazar el archivo (se actualiza la fecha de modificación).</p>
                 </div>
@@ -425,7 +426,7 @@ foreach ($documentos as $doc) {
                         <textarea class="form-control" name="descripcion" rows="2"></textarea>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Archivo * (PDF, Word, Excel. Máx. 10 MB)</label>
+                        <label class="form-label">Archivo * (PDF, Word, Excel. Máx. <?php echo $max_documento_mb; ?> MB)</label>
                         <input type="file" class="form-control" name="archivo" accept=".pdf,.doc,.docx,.xls,.xlsx" required>
                     </div>
                     <div class="mb-3">

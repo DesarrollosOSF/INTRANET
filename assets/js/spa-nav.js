@@ -67,6 +67,13 @@
     }
 
     function loadPage(url, pushState) {
+        if (typeof window.hideAllExperienciaTooltips === 'function') {
+            window.hideAllExperienciaTooltips();
+        }
+        document.querySelectorAll('.tooltip').forEach(function(el) {
+            if (el.parentNode) el.parentNode.removeChild(el);
+        });
+
         var main = document.getElementById(MAIN_ID);
         if (!main) return;
 
@@ -117,6 +124,11 @@
         if (!href || href === '#' || href.indexOf('javascript:') === 0) return;
         if (shouldReloadFull(href)) return;
         if (!isSameOrigin(href)) return;
+
+        if (typeof window.hideAllExperienciaTooltips === 'function') {
+            window.hideAllExperienciaTooltips();
+        }
+
         e.preventDefault();
         loadPage(link.href, true);
     }, true);

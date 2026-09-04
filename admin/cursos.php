@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $activo = isset($_POST['activo']) ? 1 : 0;
         $id = $accion === 'editar' ? (int)$_POST['id'] : null;
         
-        // Manejar imagen (máx 2MB)
+        // Manejar imagen (límite: MAX_IMAGE_SIZE)
         $imagen = null;
         $error_subida_imagen = false;
         if (isset($_FILES['imagen']) && $_FILES['imagen']['error'] === UPLOAD_ERR_OK) {
@@ -216,7 +216,7 @@ $dependencias = $stmt->fetchAll();
                     <div class="mb-3">
                         <label class="form-label">Imagen Representativa</label>
                         <input type="file" class="form-control" name="imagen" id="imagenCurso" accept="image/*">
-                        <small class="text-muted">Máx 2MB. Formatos: JPG, PNG, GIF, WEBP</small>
+                        <small class="text-muted">Máx. <?php echo (int) ceil(MAX_IMAGE_SIZE / (1024 * 1024)); ?> MB. Formatos: JPG, PNG, GIF, WEBP</small>
                         <div id="imagenPreview" class="mt-2"></div>
                     </div>
                     

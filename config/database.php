@@ -6,7 +6,7 @@
 define('DB_HOST', 'localhost');
 define('DB_USER', 'root');
 define('DB_PASS', '');
-define('DB_NAME', 'intranet_osf');
+define('DB_NAME', 'osfcomco_intranet_osf');
 define('DB_CHARSET', 'utf8mb4');
 
 /**

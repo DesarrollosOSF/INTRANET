@@ -31,12 +31,15 @@ if (!$curso) {
 
 $mensaje = '';
 $tipo_mensaje = '';
+$max_video_mb = (int) ceil(MAX_VIDEO_SIZE / (1024 * 1024));
+$max_documento_mb = (int) ceil(MAX_DOCUMENT_SIZE / (1024 * 1024));
+$max_imagen_mb = (int) ceil(MAX_IMAGE_SIZE / (1024 * 1024));
 
 // Procesar acciones
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Si PHP rechazó el body por superar post_max_size, $_POST y $_FILES llegan vacíos
     if (empty($_POST) && empty($_FILES)) {
-        $mensaje = 'El archivo supera el límite permitido (máx. 100 MB para videos). Reduzca el tamaño del archivo e intente de nuevo.';
+        $mensaje = 'La subida fue rechazada por el servidor (límite de tamaño de la petición o del archivo). Para vídeos el límite de la aplicación es ' . $max_video_mb . ' MB; en el hosting revise php.ini (upload_max_filesize, post_max_size) y límites del servidor web (p. ej. client_max_body_size en Nginx).';
         $tipo_mensaje = 'danger';
     }
     $accion = $_POST['accion'] ?? '';
@@ -226,7 +229,7 @@ $evaluacion = $stmt->fetch();
                             <?php foreach ($modulos as $mod): 
                                 $cant = isset($materiales_por_modulo[$mod['id']]) ? count($materiales_por_modulo[$mod['id']]) : 0;
                             ?>
-                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
                                     <div>
                                         <strong><?php echo htmlspecialchars($mod['titulo']); ?></strong>
                                         <span class="badge bg-secondary ms-2"><?php echo $cant; ?> material<?php echo $cant !== 1 ? 'es' : ''; ?></span>
@@ -277,7 +280,19 @@ $evaluacion = $stmt->fetch();
                                         <div class="list-group-item">
                                             <div class="d-flex justify-content-between align-items-start">
                                                 <div class="flex-grow-1">
-                                                    <i class="bi bi-<?php echo $material['tipo'] === 'video' ? 'play-circle' : ($material['tipo'] === 'pdf' ? 'file-pdf' : 'image'); ?> me-2"></i>
+                                                    <i class="bi bi-<?php 
+                                                        if ($material['tipo'] === 'video') {
+                                                            echo 'play-circle';
+                                                        } elseif ($material['tipo'] === 'pdf') {
+                                                            echo 'file-pdf';
+                                                        } elseif ($material['tipo'] === 'word') {
+                                                            echo 'file-earmark-word';
+                                                        } elseif ($material['tipo'] === 'ppt') {
+                                                            echo 'file-earmark-slides';
+                                                        } else {
+                                                            echo 'image';
+                                                        }
+                                                    ?> me-2"></i>
                                                     <strong><?php echo htmlspecialchars($material['titulo']); ?></strong>
                                                     <?php if (!empty($material['descripcion'])): ?>
                                                         <p class="mb-1 small text-muted"><?php echo htmlspecialchars($material['descripcion']); ?></p>
@@ -299,10 +314,22 @@ $evaluacion = $stmt->fetch();
                             <div class="list-group mb-3">
                                 <?php foreach ($materiales_sin_modulo as $material): ?>
                                     <div class="list-group-item">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div class="flex-grow-1">
-                                                <i class="bi bi-<?php echo $material['tipo'] === 'video' ? 'play-circle' : ($material['tipo'] === 'pdf' ? 'file-pdf' : 'image'); ?> me-2"></i>
-                                                <strong><?php echo htmlspecialchars($material['titulo']); ?></strong>
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
+                                            <i class="bi bi-<?php 
+                                                if ($material['tipo'] === 'video') {
+                                                    echo 'play-circle';
+                                                } elseif ($material['tipo'] === 'pdf') {
+                                                    echo 'file-pdf';
+                                                } elseif ($material['tipo'] === 'word') {
+                                                    echo 'file-earmark-word';
+                                                } elseif ($material['tipo'] === 'ppt') {
+                                                    echo 'file-earmark-slides';
+                                                } else {
+                                                    echo 'image';
+                                                }
+                                            ?> me-2"></i>
+                                            <strong><?php echo htmlspecialchars($material['titulo']); ?></strong>
                                                 <form method="POST" class="d-inline ms-2" onsubmit="return confirm('¿Eliminar este material?');">
                                                     <input type="hidden" name="accion" value="eliminar_material">
                                                     <input type="hidden" name="material_id" value="<?php echo $material['id']; ?>">
@@ -405,6 +432,8 @@ $evaluacion = $stmt->fetch();
                             <option value="">Seleccione...</option>
                             <option value="video">Video</option>
                             <option value="pdf">Documento PDF</option>
+                            <option value="word">Documento Word</option>
+                            <option value="ppt">Presentación PowerPoint</option>
                             <option value="imagen">Imagen</option>
                         </select>
                     </div>
@@ -457,10 +486,25 @@ document.getElementById('tipoMaterial').addEventListener('change', function() {
     var tipo = this.value;
     var archivoInput = document.getElementById('archivoMaterial');
     var helpText = document.getElementById('archivoHelp');
-    if (tipo === 'video') { archivoInput.setAttribute('accept', 'video/*'); helpText.textContent = 'Formatos: MP4, WebM, OGG. Tamaño máximo: 100 MB.'; }
-    else if (tipo === 'pdf') { archivoInput.setAttribute('accept', 'application/pdf'); helpText.textContent = 'Formato: PDF. Máx. 10 MB.'; }
-    else if (tipo === 'imagen') { archivoInput.setAttribute('accept', 'image/*'); helpText.textContent = 'Formatos: JPG, PNG, GIF, WEBP. Máx. 10 MB.'; }
-    else { archivoInput.removeAttribute('accept'); helpText.textContent = ''; }
+    if (tipo === 'video') {
+        archivoInput.setAttribute('accept', 'video/*');
+        helpText.textContent = 'Formatos: MP4, WebM, OGG. Tamaño máximo: <?php echo $max_video_mb; ?> MB.';
+    } else if (tipo === 'pdf') {
+        archivoInput.setAttribute('accept', 'application/pdf');
+        helpText.textContent = 'Formato: PDF. Máx. <?php echo $max_documento_mb; ?> MB.';
+    } else if (tipo === 'word') {
+        archivoInput.setAttribute('accept', 'application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        helpText.textContent = 'Formatos: Word (.doc, .docx). Máx. <?php echo $max_documento_mb; ?> MB.';
+    } else if (tipo === 'ppt') {
+        archivoInput.setAttribute('accept', 'application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation');
+        helpText.textContent = 'Formatos: PowerPoint (.ppt, .pptx). Máx. <?php echo $max_documento_mb; ?> MB.';
+    } else if (tipo === 'imagen') {
+        archivoInput.setAttribute('accept', 'image/*');
+        helpText.textContent = 'Formatos: JPG, PNG, GIF, WEBP. Máx. <?php echo $max_imagen_mb; ?> MB.';
+    } else {
+        archivoInput.removeAttribute('accept');
+        helpText.textContent = '';
+    }
 });
 </script>
 

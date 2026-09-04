@@ -5,14 +5,67 @@ requerirPermiso('ver_reportes');
 $page_title = 'Reportes y Estadísticas';
 $additional_css = ['assets/css/admin.css'];
 
-require_once '../includes/header.php';
-
 $pdo = getDBConnection();
+
+// Endpoint AJAX para detalle de preguntas por intento
+if (isset($_GET['ajax_detalle_intento'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $intento_id = isset($_GET['intento_id']) ? (int)$_GET['intento_id'] : 0;
+    if ($intento_id <= 0) {
+        echo json_encode(['ok' => false, 'mensaje' => 'Intento inválido']);
+        exit;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT 
+            p.id as pregunta_id,
+            p.pregunta,
+            ru_ult.opcion_id as respuesta_opcion_id,
+            ou.texto as respuesta_usuario,
+            COALESCE(ou.es_correcta, 0) as correcta
+        FROM intentos_evaluacion ie
+        INNER JOIN preguntas p ON p.evaluacion_id = ie.evaluacion_id
+        LEFT JOIN (
+            SELECT ru1.intento_id, ru1.pregunta_id, ru1.opcion_id
+            FROM respuestas_usuario ru1
+            INNER JOIN (
+                SELECT intento_id, pregunta_id, MAX(id) AS max_id
+                FROM respuestas_usuario
+                WHERE intento_id = ?
+                GROUP BY intento_id, pregunta_id
+            ) ru2 ON ru1.id = ru2.max_id
+        ) ru_ult ON ru_ult.intento_id = ie.id AND ru_ult.pregunta_id = p.id
+        LEFT JOIN opciones_respuesta ou ON ou.id = ru_ult.opcion_id
+        WHERE ie.id = ?
+        ORDER BY p.orden ASC, p.id ASC
+    ");
+    $stmt->execute([$intento_id, $intento_id]);
+    $rows = $stmt->fetchAll();
+
+    if (!$rows) {
+        echo json_encode(['ok' => false, 'mensaje' => 'No se encontró detalle de preguntas para este intento']);
+        exit;
+    }
+
+    $detalle = [];
+    foreach ($rows as $row) {
+        $es_correcta = (int)$row['correcta'] === 1;
+        $detalle[] = [
+            'pregunta' => (string)$row['pregunta'],
+            'respuesta_usuario' => $row['respuesta_usuario'] !== null && $row['respuesta_usuario'] !== '' ? (string)$row['respuesta_usuario'] : 'Sin respuesta',
+            'correcta' => $es_correcta,
+            'resultado_texto' => $es_correcta ? '1 de 1' : '0 de 1'
+        ];
+    }
+
+    echo json_encode(['ok' => true, 'detalle_preguntas' => $detalle]);
+    exit;
+}
 
 // Filtros
 $curso_id = isset($_GET['curso_id']) ? (int)$_GET['curso_id'] : 0;
 $dependencia_id = isset($_GET['dependencia_id']) ? (int)$_GET['dependencia_id'] : 0;
-$usuarios_por_pagina = 3;
+$usuarios_por_pagina = 20;
 $pagina_detalle = isset($_GET['pagina_detalle']) ? max(1, (int)$_GET['pagina_detalle']) : 1;
 
 // Obtener cursos
@@ -75,6 +128,7 @@ if ($curso_id) {
     // Detalle de usuarios por curso (con LIMIT y OFFSET)
     $stmt = $pdo->prepare("
         SELECT 
+            i.id as inscripcion_id,
             u.nombre_completo,
             u.email,
             i.fecha_inscripcion,
@@ -96,6 +150,20 @@ if ($curso_id) {
     ");
     $stmt->execute([$curso_id, $usuarios_por_pagina, $offset_detalle]);
     $detalle_usuarios = $stmt->fetchAll();
+
+    foreach ($detalle_usuarios as &$detalle_usuario) {
+        $stmt_intento = $pdo->prepare("
+            SELECT ie.id
+            FROM intentos_evaluacion ie
+            INNER JOIN evaluaciones e ON e.id = ie.evaluacion_id
+            WHERE ie.inscripcion_id = ? AND e.curso_id = ? AND ie.estado <> 'en_proceso'
+            ORDER BY ie.fecha_finalizacion DESC, ie.id DESC
+            LIMIT 1
+        ");
+        $stmt_intento->execute([(int)$detalle_usuario['inscripcion_id'], $curso_id]);
+        $detalle_usuario['ultimo_intento_id'] = (int)$stmt_intento->fetchColumn();
+    }
+    unset($detalle_usuario);
 }
 
 // Reporte por dependencia
@@ -116,6 +184,8 @@ if ($dependencia_id) {
     $stmt->execute([$dependencia_id]);
     $reporte_dependencia = $stmt->fetch();
 }
+
+require_once '../includes/header.php';
 ?>
 
 <div class="container-fluid mt-4">
@@ -279,10 +349,14 @@ if ($dependencia_id) {
                                         <?php
                                         $es_aprobado = !empty($detalle['estado_final']) && $detalle['estado_final'] === 'aprobado';
                                         $puntaje = $es_aprobado ? $detalle['mejor_puntaje'] : $detalle['mejor_puntaje_cualquiera'];
+                                        $ultimo_intento_id = isset($detalle['ultimo_intento_id']) ? (int)$detalle['ultimo_intento_id'] : 0;
                                         if ($puntaje !== null && $puntaje !== ''): ?>
-                                            <span class="badge bg-<?php echo $es_aprobado ? 'success' : 'danger'; ?>">
+                                            <button type="button"
+                                                    class="badge bg-<?php echo $es_aprobado ? 'success' : 'danger'; ?> border-0 btn-ver-detalle-puntaje"
+                                                    data-intento-id="<?php echo $ultimo_intento_id; ?>"
+                                                    title="Ver detalle del último intento">
                                                 <?php echo number_format((float)$puntaje, 1); ?>%
-                                            </span>
+                                            </button>
                                         <?php else: ?>
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>
@@ -346,5 +420,108 @@ if ($dependencia_id) {
         </div>
     <?php endif; ?>
 </div>
+
+<div class="modal fade" id="modalDetallePreguntas" tabindex="-1" aria-labelledby="modalDetallePreguntasLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalDetallePreguntasLabel">
+                    <i class="bi bi-journal-check me-2"></i>Detalle de preguntas
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="contenidoDetallePreguntas">
+                <div class="text-center text-muted">Selecciona un puntaje para ver el detalle.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.item-detalle-pregunta {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+}
+
+.badge-resultado-pregunta {
+    min-width: 70px;
+    text-align: center;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var modalEl = document.getElementById('modalDetallePreguntas');
+    var contenido = document.getElementById('contenidoDetallePreguntas');
+    if (!modalEl || !contenido) return;
+
+    var modal = (typeof bootstrap !== 'undefined' && bootstrap.Modal) ? new bootstrap.Modal(modalEl) : null;
+
+    function escapeHtml(texto) {
+        return String(texto || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function renderDetalle(detallePreguntas) {
+        if (!Array.isArray(detallePreguntas) || detallePreguntas.length === 0) {
+            contenido.innerHTML = '<div class="alert alert-info mb-0">No hay preguntas para mostrar.</div>';
+            return;
+        }
+        var html = '';
+        detallePreguntas.forEach(function(item, index) {
+            var resultadoClass = item.correcta ? 'bg-success' : 'bg-danger';
+            var resultadoTexto = item.resultado_texto || (item.correcta ? '1 de 1' : '0 de 1');
+            html += ''
+                + '<div class="item-detalle-pregunta">'
+                + '  <div class="d-flex align-items-start justify-content-between gap-3">'
+                + '    <span class="badge ' + resultadoClass + ' badge-resultado-pregunta">' + escapeHtml(resultadoTexto) + '</span>'
+                + '    <div class="flex-grow-1">'
+                + '      <p class="mb-2"><strong>Pregunta ' + (index + 1) + ':</strong> ' + escapeHtml(item.pregunta || '') + '</p>'
+                + '      <p class="mb-0 text-muted"><strong>Respuesta del usuario:</strong> ' + escapeHtml(item.respuesta_usuario || 'Sin respuesta') + '</p>'
+                + '    </div>'
+                + '  </div>'
+                + '</div>';
+        });
+        contenido.innerHTML = html;
+    }
+
+    document.querySelectorAll('.btn-ver-detalle-puntaje').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var intentoId = parseInt(this.getAttribute('data-intento-id') || '0', 10);
+            if (!intentoId) {
+                contenido.innerHTML = '<div class="alert alert-warning mb-0">No se encontró un intento para este usuario.</div>';
+                if (modal) modal.show();
+                return;
+            }
+
+            contenido.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm me-2"></span>Cargando detalle...</div>';
+            if (modal) modal.show();
+
+            var url = 'reportes.php?curso_id=<?php echo (int)$curso_id; ?>&dependencia_id=<?php echo (int)$dependencia_id; ?>&pagina_detalle=<?php echo (int)$pagina_detalle; ?>&ajax_detalle_intento=1&intento_id=' + intentoId;
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data || data.ok !== true) {
+                        contenido.innerHTML = '<div class="alert alert-danger mb-0">' + escapeHtml((data && data.mensaje) ? data.mensaje : 'No fue posible cargar el detalle.') + '</div>';
+                        return;
+                    }
+                    renderDetalle(data.detalle_preguntas || []);
+                })
+                .catch(function() {
+                    contenido.innerHTML = '<div class="alert alert-danger mb-0">Error al cargar el detalle de preguntas.</div>';
+                });
+        });
+    });
+});
+</script>
 
 <?php require_once '../includes/footer.php'; ?>

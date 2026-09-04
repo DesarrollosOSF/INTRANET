@@ -82,6 +82,7 @@ try {
     $stats = ['cursos' => 0, 'mis_cursos' => 0, 'completados' => 0];
     $eventos = [];
 }
+
 ?>
 
 <div class="container-fluid dashboard-wrap mt-4">
@@ -119,6 +120,7 @@ try {
             <div class="comunicados-panel flex-grow-1 d-flex flex-column">
                 <div class="comunicados-panel-header">
                     <span class="comunicados-panel-title"><i class="bi bi-megaphone-fill me-2"></i>Comunicados Importantes</span>
+                        <a href="ayuda.php"><i class="bi bi-life-preserver me-1" id="menu-manual"></i>Guia de Usuario</a>
                 </div>
                 <div class="comunicados-panel-content comunicados-grid-wrap">
                     <?php if (empty($comunicados)): ?>
@@ -127,15 +129,19 @@ try {
                         <div class="comunicados-grid" id="comunicadosGrid" data-blocks-per-page="6">
                             <?php foreach ($comunicados as $index => $comunicado): 
                                 $archivo_url = !empty($comunicado['imagen']) ? UPLOAD_URL . $comunicado['imagen'] : '';
-                                $es_pdf = $archivo_url && (strtolower(pathinfo($comunicado['imagen'], PATHINFO_EXTENSION)) === 'pdf');
+                                $ext_archivo = $archivo_url ? strtolower(pathinfo($comunicado['imagen'], PATHINFO_EXTENSION)) : '';
+                                $es_pdf = ($ext_archivo === 'pdf');
+                                $es_video = in_array($ext_archivo, ALLOWED_VIDEO_EXT, true);
                                 $titulo = htmlspecialchars($comunicado['titulo']);
                                 $fecha = date('d/m/Y', strtotime($comunicado['fecha_publicacion']));
                             ?>
                                 <div class="comunicado-block" 
                                      data-index="<?php echo $index; ?>"
                                      data-titulo="<?php echo $titulo; ?>"
+                                     data-id="<?php echo (int)$comunicado['id']; ?>
                                      data-fecha="<?php echo $fecha; ?>"
                                      data-pdf="<?php echo $es_pdf ? '1' : '0'; ?>"
+                                     data-video="<?php echo $es_video ? '1' : '0'; ?>"
                                      data-url="<?php echo htmlspecialchars($archivo_url); ?>"
                                      role="button" tabindex="0" title="Clic para ver en pantalla completa">
                                     <div class="d-none comunicado-block-raw-contenido"><?php echo htmlspecialchars($comunicado['contenido'] ?? ''); ?></div>
@@ -145,6 +151,11 @@ try {
                                                 <div class="comunicado-block-preview comunicado-block-preview-pdf">
                                                     <i class="bi bi-file-earmark-pdf-fill"></i>
                                                     <span>PDF</span>
+                                                </div>
+                                            <?php elseif ($es_video): ?>
+                                                <div class="comunicado-block-preview comunicado-block-preview-video">
+                                                    <i class="bi bi-play-circle-fill"></i>
+                                                    <span>Video</span>
                                                 </div>
                                             <?php else: ?>
                                                 <div class="comunicado-block-preview" style="background-image: url('<?php echo htmlspecialchars($archivo_url); ?>');"></div>
@@ -200,13 +211,25 @@ try {
         function openFullscreen(block) {
             if (!overlay) return;
             lastFocusedBlock = block;
+            var comunicadoId = block.getAttribute('data-id');
+if (comunicadoId) {
+    fetch('api/registrar_vista.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'tipo=comunicado&id=' + encodeURIComponent(comunicadoId)
+    });
+}
             var titulo = block.getAttribute('data-titulo') || '';
             var fecha = block.getAttribute('data-fecha') || '';
             var url = block.getAttribute('data-url') || '';
             var esPdf = block.getAttribute('data-pdf') === '1';
+            var esVideo = block.getAttribute('data-video') === '1';
             var rawEl = block.querySelector('.comunicado-block-raw-contenido');
             var contenido = rawEl ? rawEl.textContent.trim() : '';
+        var titulo = block.getAttribute('data-titulo') || 'Sin título';
+    var idComunicado = block.getAttribute('data-id') || '';
 
+    
             document.getElementById('comunicadoFullscreenTitulo').textContent = titulo;
             document.getElementById('comunicadoFullscreenFecha').textContent = fecha || '';
             var body = document.getElementById('comunicadoFullscreenBody');
@@ -219,6 +242,8 @@ try {
                 if (esPdf) {
                     mediaHtml = '<iframe src="' + url.replace(/"/g, '&quot;') + '#toolbar=0" class="comunicado-contenido-full" title="' + titulo.replace(/"/g, '&quot;') + '"></iframe>';
                     footer.innerHTML = '<a href="' + url.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir en nueva pestaña</a>';
+                } else if (esVideo) {
+                    mediaHtml = '<video class="comunicado-contenido-full comunicado-video-full" controls playsinline><source src="' + url.replace(/"/g, '&quot;') + '">Su navegador no soporta la reproducción de video.</video>';
                 } else {
                     mediaHtml = '<img src="' + url.replace(/"/g, '&quot;') + '" alt="' + titulo.replace(/"/g, '&quot;') + '" class="comunicado-contenido-full comunicado-imagen-full">';
                 }
@@ -275,5 +300,6 @@ try {
     </script>
     
 </div>
+<?php require_once 'includes/tour_bienvenida.php'; ?>
 
 <?php require_once 'includes/footer.php'; ?>

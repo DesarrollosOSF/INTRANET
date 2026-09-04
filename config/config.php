@@ -9,6 +9,16 @@ ini_set('session.use_only_cookies', 1);
 ini_set('session.cookie_secure', 0); // Cambiar a 1 en producción con HTTPS
 session_start();
 
+
+define('SMTP_HOST', 'mail.osf.com.co');
+define('SMTP_USER', 'notificaciones@osf.com.co');
+define('SMTP_PASS', 'tu_password');
+define('SMTP_PORT', 587);
+define('SMTP_SEGURIDAD', 'tls');
+define('SMTP_FROM_EMAIL', 'notificaciones@osf.com.co');
+define('SMTP_FROM_NOMBRE', 'Intranet OSF');
+// define('BASE_URL', 'https://intranet.osf.com.co'); // sin slash al final
+
 // Zona horaria
 date_default_timezone_set('America/Bogota');
 
@@ -32,20 +42,48 @@ define('UPLOAD_PATH', BASE_PATH . 'uploads/');
 define('UPLOAD_URL', BASE_URL . 'uploads/');
 
 // Configuración de archivos y límites de tamaño
-define('MAX_FILE_SIZE', 10 * 1024 * 1024);    // 10MB límite genérico
-define('MAX_IMAGE_SIZE', 10 * 1024 * 1024);   // 10MB para imágenes
-define('MAX_DOCUMENT_SIZE', 10 * 1024 * 1024); // 10MB para documentos/PDFs
-define('MAX_VIDEO_SIZE', 100 * 1024 * 1024);  // 100MB para videos en materiales de curso
+// El techo de la app es 600 MB; PHP debe permitir al menos eso (ver .htaccess / .user.ini: 650M)
+define('MAX_FILE_SIZE', 600 * 1024 * 1024);     // 600MB límite genérico
+define('MAX_IMAGE_SIZE', 600 * 1024 * 1024);    // 600MB para imágenes
+define('MAX_DOCUMENT_SIZE', 600 * 1024 * 1024); // 600MB para documentos (PDF, Word, PowerPoint, imágenes)
+// Vídeos en materiales de curso (ajustar también php.ini: upload_max_filesize y post_max_size >= este valor)
+define('MAX_VIDEO_SIZE', 600 * 1024 * 1024);  // 600 MB
 define('ALLOWED_VIDEO_TYPES', ['video/mp4', 'video/webm', 'video/ogg']);
+// MIME alternativos que algunos servidores reportan para videos válidos (p. ej. WhatsApp / iPhone)
+define('ALLOWED_VIDEO_MIMES', array_merge(ALLOWED_VIDEO_TYPES, [
+    'video/quicktime',
+    'video/x-msvideo',
+    'application/octet-stream',
+    'application/mp4',
+]));
 define('ALLOWED_IMAGE_TYPES', ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
-define('ALLOWED_DOCUMENT_TYPES', ['application/pdf']);
-// Documentos de interés: PDF, Word, Excel
-define('UPLOAD_PATH_DOCUMENTOS_INTERES', UPLOAD_PATH . 'documentos_interes/');
-define('ALLOWED_DOCUMENTOS_INTERES_EXT', ['pdf', 'doc', 'docx', 'xls', 'xlsx']);
-define('ALLOWED_DOCUMENTOS_INTERES_MIMES', [
-    'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+define('ALLOWED_DOCUMENT_TYPES', [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 ]);
+// Documentos de interés: PDF, Office y videos
+define('UPLOAD_PATH_DOCUMENTOS_INTERES', UPLOAD_PATH . 'documentos_interes/');
+define('UPLOAD_PATH_SST', UPLOAD_PATH . 'sst/');
+define('UPLOAD_URL_SST', UPLOAD_URL . 'sst/');
+define('UPLOAD_PATH_EXPERIENCIA', UPLOAD_PATH . 'experiencia/');
+define('UPLOAD_URL_EXPERIENCIA', UPLOAD_URL . 'experiencia/');
+define('ALLOWED_VIDEO_EXT', ['mp4', 'webm', 'ogg']);
+define('ALLOWED_DOCUMENTOS_INTERES_EXT', array_merge(
+    ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'],
+    ALLOWED_VIDEO_EXT
+));
+define('ALLOWED_DOCUMENTOS_INTERES_MIMES', array_merge([
+    'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+], ALLOWED_VIDEO_TYPES));
+// Experiencia: documentos + vídeos (solo visualización en visor integrado)
+define('ALLOWED_EXPERIENCIA_EXT', ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'mp4', 'webm', 'ogg']);
+define('ALLOWED_EXPERIENCIA_MIMES', array_merge(ALLOWED_DOCUMENTOS_INTERES_MIMES, ALLOWED_VIDEO_TYPES));
+define('EXPERIENCIA_VIEWER_TOKEN_TTL', 3600);
 
 // Configuración de seguridad
 define('SESSION_TIMEOUT', 3600); // 1 hora en segundos
@@ -85,10 +123,13 @@ function nombresPermisoParaSlug($slug) {
         'gestionar_comunicados'        => ['gestionar_comunicados', 'Gestionar Comunicados', 'Gestionar comunicados'],
         'gestionar_dependencias'       => ['gestionar_dependencias', 'Gestionar Dependencias', 'Gestionar dependencias'],
         'gestionar_documentos_interes' => ['gestionar_documentos_interes', 'Gestionar Documentos de Interés', 'Gestionar Documentos Interés', 'Gestionar documentos de interés'],
+        'gestionar_experiencia'        => ['gestionar_experiencia', 'Gestionar Experiencia', 'Gestionar experiencia'],
+        'gestionar_sst'                => ['gestionar_sst', 'Gestionar SST', 'Gestionar sst'],
         'ver_reportes'                => ['ver_reportes', 'Ver Reportes', 'Ver reportes'],
         'ver_cursos'                  => ['ver_cursos', 'Ver Cursos', 'Ver cursos'],
         'ver_datos_interes'            => ['ver_datos_interes', 'Ver Datos de Interés', 'Ver datos de interés'],
         'ver_documentos_interes'      => ['ver_documentos_interes', 'Ver Documentos de Interés', 'Ver Documentos de interés'],
+        'ver_sst'                     => ['ver_sst', 'Ver SST', 'Ver sst'],
         'ver_dashboard'               => ['ver_dashboard', 'Ver Dashboard', 'Ver dashboard'],
         'presentar_evaluaciones'      => ['presentar_evaluaciones', 'Presentar Evaluaciones', 'Presentar evaluaciones'],
         'ver_documentos'              => ['ver_documentos', 'Ver Documentos', 'Ver documentos'],
@@ -328,4 +369,100 @@ function validarTamanoSubida($size_bytes, $tipo = 'imagen') {
         return ['valido' => false, 'mensaje' => "El archivo supera el tamaño máximo permitido ({$limite_mb}MB)."];
     }
     return ['valido' => true, 'mensaje' => ''];
+}
+
+/**
+ * Indica si PHP rechazó el POST por superar post_max_size (formulario y archivos vacíos).
+ */
+function subidaRechazadaPorLimiteServidor() {
+    return $_SERVER['REQUEST_METHOD'] === 'POST'
+        && empty($_POST)
+        && empty($_FILES)
+        && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0;
+}
+
+/**
+ * Mensaje legible para códigos UPLOAD_ERR_* de PHP.
+ */
+function mensajeErrorSubidaPhp($error_code) {
+    switch ((int) $error_code) {
+        case UPLOAD_ERR_INI_SIZE:
+            return 'El archivo supera upload_max_filesize del servidor (php.ini). Solicite al hosting aumentar ese límite para videos.';
+        case UPLOAD_ERR_FORM_SIZE:
+            return 'El archivo supera el límite permitido por el formulario o post_max_size del servidor.';
+        case UPLOAD_ERR_PARTIAL:
+            return 'La subida se interrumpió. Intente de nuevo con conexión estable.';
+        case UPLOAD_ERR_NO_FILE:
+            return 'No se recibió ningún archivo. Seleccione un archivo e intente de nuevo.';
+        case UPLOAD_ERR_NO_TMP_DIR:
+            return 'El servidor no tiene carpeta temporal para subidas (upload_tmp_dir). Contacte al administrador.';
+        case UPLOAD_ERR_CANT_WRITE:
+            return 'No se pudo escribir el archivo en disco. Revise permisos del servidor.';
+        case UPLOAD_ERR_EXTENSION:
+            return 'Una extensión de PHP bloqueó la subida del archivo.';
+        default:
+            return 'Error desconocido al subir el archivo (código ' . (int) $error_code . ').';
+    }
+}
+
+/**
+ * Obtiene MIME del archivo subido; tolera servidores sin extensión fileinfo.
+ */
+function mimeArchivoSubido($tmp_path, $nombre_original = '') {
+    if ($tmp_path && is_readable($tmp_path) && function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $mime = finfo_file($finfo, $tmp_path);
+            finfo_close($finfo);
+            if ($mime) {
+                return $mime;
+            }
+        }
+    }
+    $ext = strtolower(pathinfo($nombre_original, PATHINFO_EXTENSION));
+    if (in_array($ext, ALLOWED_VIDEO_EXT, true)) {
+        return 'video/' . ($ext === 'ogg' ? 'ogg' : $ext);
+    }
+    return 'application/octet-stream';
+}
+
+/**
+ * Valida extensión y MIME de un archivo de documentos de interés (incluye videos).
+ */
+function validarArchivoDocumentosInteres($file) {
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $mime = mimeArchivoSubido($file['tmp_name'], $file['name']);
+    $es_video = in_array($ext, ALLOWED_VIDEO_EXT, true);
+    $max_size = $es_video ? MAX_VIDEO_SIZE : MAX_DOCUMENT_SIZE;
+
+    if (!in_array($ext, ALLOWED_DOCUMENTOS_INTERES_EXT, true)) {
+        return ['valido' => false, 'mensaje' => 'Tipo no permitido. Use PDF, Word, Excel, PowerPoint o video (MP4, WebM, OGG).', 'ext' => $ext, 'es_video' => $es_video];
+    }
+
+    $mimes_ok = $es_video ? ALLOWED_VIDEO_MIMES : ALLOWED_DOCUMENTOS_INTERES_MIMES;
+    if (!in_array($mime, $mimes_ok, true)) {
+        // Si la extensión es video conocida, aceptar aunque el MIME sea genérico (común en producción)
+        if (!$es_video || !in_array($mime, ['application/octet-stream', 'binary/octet-stream'], true)) {
+            return ['valido' => false, 'mensaje' => 'Tipo MIME no reconocido (' . $mime . '). Extensión: .' . $ext . '. Si es un video válido, contacte soporte.', 'ext' => $ext, 'es_video' => $es_video];
+        }
+    }
+
+    if ((int) $file['size'] > $max_size) {
+        $max_mb = (int) ceil($max_size / (1024 * 1024));
+        return ['valido' => false, 'mensaje' => 'El archivo supera ' . $max_mb . ' MB.', 'ext' => $ext, 'es_video' => $es_video];
+    }
+
+    return ['valido' => true, 'mensaje' => '', 'ext' => $ext, 'es_video' => $es_video];
+}
+
+/**
+ * Mensaje cuando el hosting rechaza peticiones grandes (post_max_size / nginx client_max_body_size).
+ */
+function mensajeLimiteSubidaServidor($contexto = 'video') {
+    $max_video_mb = (int) ceil(MAX_VIDEO_SIZE / (1024 * 1024));
+    $base = 'La subida fue rechazada por el servidor antes de procesarse.';
+    if ($contexto === 'video') {
+        return $base . ' Límite de la aplicación para videos: ' . $max_video_mb . ' MB. En producción revise php.ini (upload_max_filesize, post_max_size), .user.ini o límites del servidor web (p. ej. client_max_body_size en Nginx).';
+    }
+    return $base . ' Revise upload_max_filesize y post_max_size en php.ini del hosting.';
 }

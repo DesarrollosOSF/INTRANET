@@ -54,6 +54,7 @@ if (!$error_tabla) {
         $error_tabla = true;
     }
 }
+
 ?>
 
 <div class="container my-4">

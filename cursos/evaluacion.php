@@ -159,11 +159,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enviar_evaluacion']))
     $respuestas = $_POST['respuestas'] ?? [];
     $puntaje_total = 0;
     $puntaje_obtenido = 0;
+    $detalle_preguntas = [];
     
     // Calcular puntaje
     foreach ($preguntas as $pregunta) {
         $puntaje_total += $pregunta['puntos'];
         $respuesta_usuario = $respuestas[$pregunta['id']] ?? null;
+        $respuesta_texto = 'Sin respuesta';
+        $es_correcta = false;
         
         if ($respuesta_usuario) {
             // Guardar respuesta
@@ -178,11 +181,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enviar_evaluacion']))
             $stmt = $pdo->prepare("SELECT es_correcta FROM opciones_respuesta WHERE id = ?");
             $stmt->execute([$respuesta_usuario]);
             $opcion = $stmt->fetch();
+
+            $stmt = $pdo->prepare("SELECT texto FROM opciones_respuesta WHERE id = ?");
+            $stmt->execute([$respuesta_usuario]);
+            $opcion_texto = $stmt->fetch();
+            if ($opcion_texto && isset($opcion_texto['texto'])) {
+                $respuesta_texto = (string)$opcion_texto['texto'];
+            }
             
             if ($opcion && $opcion['es_correcta']) {
                 $puntaje_obtenido += $pregunta['puntos'];
+                $es_correcta = true;
             }
         }
+
+        $detalle_preguntas[] = [
+            'pregunta' => (string)$pregunta['pregunta'],
+            'respuesta_usuario' => $respuesta_texto,
+            'correcta' => $es_correcta,
+            'resultado_texto' => $es_correcta ? '1 de 1' : '0 de 1'
+        ];
     }
     
     // Calcular porcentaje
@@ -210,6 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enviar_evaluacion']))
             'puntaje_total' => (int)$puntaje_total,
             'puntaje_minimo' => (int)$evaluacion['puntaje_minimo'],
             'curso_id' => $curso_id,
+            'detalle_preguntas' => $detalle_preguntas,
             'mensaje' => $estado === 'aprobado' 
                 ? '¡Felicitaciones! Has aprobado la evaluación.' 
                 : 'No has alcanzado el puntaje mínimo para aprobar.'
@@ -339,9 +358,31 @@ require_once '../includes/header.php';
                 <p class="small text-muted">Mínimo para aprobar: <span id="minimoResultado"></span>%</p>
             </div>
             <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-outline-primary" id="btnVerPreguntas" data-bs-toggle="modal" data-bs-target="#modalDetallePreguntas" style="display: none;">
+                    <i class="bi bi-list-check me-2"></i>Ver Preguntas
+                </button>
                 <a href="<?php echo BASE_URL; ?>index.php" class="btn btn-primary" id="btnVolverCurso">
                     <i class="bi bi-house me-2"></i>Ir al inicio
                 </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal detalle de preguntas -->
+<div class="modal fade" id="modalDetallePreguntas" tabindex="-1" aria-labelledby="modalDetallePreguntasLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalDetallePreguntasLabel">
+                    <i class="bi bi-journal-check me-2"></i>Detalle de preguntas
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="contenidoDetallePreguntas">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>
@@ -383,6 +424,18 @@ require_once '../includes/header.php';
     margin: 0;
     border-radius: 5px;
     transition: all 0.2s ease;
+}
+
+.item-detalle-pregunta {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+}
+
+.badge-resultado-pregunta {
+    min-width: 70px;
+    text-align: center;
 }
 </style>
 
@@ -468,6 +521,45 @@ document.addEventListener('DOMContentLoaded', function() {
     var porcentajeResultado = document.getElementById('porcentajeResultado');
     var minimoResultado = document.getElementById('minimoResultado');
     var btnVolverCurso = document.getElementById('btnVolverCurso');
+    var btnVerPreguntas = document.getElementById('btnVerPreguntas');
+    var contenidoDetallePreguntas = document.getElementById('contenidoDetallePreguntas');
+    var detallePreguntas = [];
+
+    function escapeHtml(texto) {
+        return String(texto || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function renderDetallePreguntas() {
+        if (!contenidoDetallePreguntas) return;
+        if (!Array.isArray(detallePreguntas) || detallePreguntas.length === 0) {
+            contenidoDetallePreguntas.innerHTML = '<div class="alert alert-info mb-0">No hay preguntas para mostrar.</div>';
+            return;
+        }
+
+        var html = '';
+        detallePreguntas.forEach(function(item, index) {
+            var resultadoClass = item.correcta ? 'bg-success' : 'bg-danger';
+            var resultadoTexto = item.resultado_texto || (item.correcta ? '1 de 1' : '0 de 1');
+            var pregunta = escapeHtml(item.pregunta || '');
+            var respuesta = escapeHtml(item.respuesta_usuario || 'Sin respuesta');
+            html += ''
+                + '<div class="item-detalle-pregunta">'
+                + '  <div class="d-flex align-items-start justify-content-between gap-3">'
+                + '    <span class="badge ' + resultadoClass + ' badge-resultado-pregunta">' + escapeHtml(resultadoTexto) + '</span>'
+                + '    <div class="flex-grow-1">'
+                + '      <p class="mb-2"><strong>Pregunta ' + (index + 1) + ':</strong> ' + pregunta + '</p>'
+                + '      <p class="mb-0 text-muted"><strong>Tu respuesta:</strong> ' + respuesta + '</p>'
+                + '    </div>'
+                + '  </div>'
+                + '</div>';
+        });
+        contenidoDetallePreguntas.innerHTML = html;
+    }
 
     function enviarEvaluacion() {
         if (!confirm('¿Estás seguro de enviar la evaluación? No podrás modificar tus respuestas.')) {
@@ -495,6 +587,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (porcentajeResultado) porcentajeResultado.textContent = data.porcentaje;
             if (minimoResultado) minimoResultado.textContent = data.puntaje_minimo;
             if (btnVolverCurso) btnVolverCurso.href = '<?php echo BASE_URL; ?>index.php';
+            detallePreguntas = Array.isArray(data.detalle_preguntas) ? data.detalle_preguntas : [];
+            renderDetallePreguntas();
+            if (btnVerPreguntas) btnVerPreguntas.style.display = 'inline-block';
             evaluacionEnviada = true;
             modalResultado.show();
         })

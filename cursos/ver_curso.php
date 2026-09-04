@@ -2,6 +2,30 @@
 require_once '../config/config.php';
 requerirPermiso('ver_cursos');
 
+/**
+ * Icono Bootstrap según tipo en BD o extensión del archivo (materiales antiguos / mal etiquetados).
+ */
+function icono_material_curso(array $material) {
+    $tipo = $material['tipo'] ?? '';
+    $ext = strtolower(pathinfo($material['archivo'] ?? '', PATHINFO_EXTENSION));
+    if ($tipo === 'video') {
+        return 'play-circle';
+    }
+    if ($tipo === 'pdf' || $ext === 'pdf') {
+        return 'file-pdf';
+    }
+    if ($tipo === 'word' || in_array($ext, ['doc', 'docx'], true)) {
+        return 'file-earmark-word';
+    }
+    if ($tipo === 'ppt' || in_array($ext, ['ppt', 'pptx'], true)) {
+        return 'file-earmark-slides';
+    }
+    if ($tipo === 'imagen' || in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+        return 'image';
+    }
+    return 'file-earmark';
+}
+
 $page_title = 'Ver Curso';
 $additional_css = ['assets/css/curso-viewer.css'];
 
@@ -125,6 +149,9 @@ $intentos_agotados = $evaluacion && $inscripcion['completado'] && !$curso_finali
 $continuar_pero_intentos_agotados = $evaluacion && $intento_activo && $intentos_restantes <= 0;
 $mostrar_modal_intentos = (isset($_GET['error']) && $_GET['error'] === 'sin_intentos' && $intentos_agotados) || $continuar_pero_intentos_agotados;
 
+require_once '../includes/auditoria_helpers.php'; // ajusta la ruta según la profundidad del archivo
+registrarVista($pdo, $_SESSION['usuario_id'], 'curso', $curso_id);
+
 require_once '../includes/header.php';
 ?>
 
@@ -158,7 +185,7 @@ require_once '../includes/header.php';
                                        class="list-group-item list-group-item-action list-group-item-light <?php echo (isset($_GET['material']) && $_GET['material'] == $material['id']) ? 'active' : ''; ?>">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div>
-                                                <i class="bi bi-<?php echo $material['tipo'] === 'video' ? 'play-circle' : ($material['tipo'] === 'pdf' ? 'file-pdf' : 'image'); ?> me-2"></i>
+                                                <i class="bi bi-<?php echo icono_material_curso($material); ?> me-2"></i>
                                                 <small><?php echo htmlspecialchars($material['titulo']); ?></small>
                                             </div>
                                             <?php if ($material['completado']): ?>
@@ -173,7 +200,7 @@ require_once '../includes/header.php';
                                    class="list-group-item list-group-item-action <?php echo (isset($_GET['material']) && $_GET['material'] == $material['id']) ? 'active' : ''; ?>">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
-                                            <i class="bi bi-<?php echo $material['tipo'] === 'video' ? 'play-circle' : ($material['tipo'] === 'pdf' ? 'file-pdf' : 'image'); ?> me-2"></i>
+                                            <i class="bi bi-<?php echo icono_material_curso($material); ?> me-2"></i>
                                             <small><?php echo htmlspecialchars($material['titulo']); ?></small>
                                         </div>
                                         <?php if ($material['completado']): ?>
@@ -188,7 +215,7 @@ require_once '../includes/header.php';
                                    class="list-group-item list-group-item-action <?php echo (isset($_GET['material']) && $_GET['material'] == $material['id']) ? 'active' : ''; ?>">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
-                                            <i class="bi bi-<?php echo $material['tipo'] === 'video' ? 'play-circle' : ($material['tipo'] === 'pdf' ? 'file-pdf' : 'image'); ?> me-2"></i>
+                                            <i class="bi bi-<?php echo icono_material_curso($material); ?> me-2"></i>
                                             <small><?php echo htmlspecialchars($material['titulo']); ?></small>
                                         </div>
                                         <?php if ($material['completado']): ?>

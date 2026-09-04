@@ -37,24 +37,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $descripcion = sanitizar($_POST['descripcion'] ?? '');
         $puntaje_minimo = (int)$_POST['puntaje_minimo'];
         $numero_intentos = (int)$_POST['numero_intentos'];
+        $evaluacion_activa = !empty($_POST['evaluacion_activa']) ? 1 : 0;
         $evaluacion_id = $accion_post === 'editar_evaluacion' ? (int)$_POST['evaluacion_id'] : null;
         
         try {
             if ($accion_post === 'crear_evaluacion') {
                 $stmt = $pdo->prepare("
-                    INSERT INTO evaluaciones (curso_id, nombre, descripcion, puntaje_minimo, numero_intentos)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO evaluaciones (curso_id, nombre, descripcion, puntaje_minimo, numero_intentos, activo)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$curso_id, $nombre, $descripcion, $puntaje_minimo, $numero_intentos]);
+                $stmt->execute([$curso_id, $nombre, $descripcion, $puntaje_minimo, $numero_intentos, $evaluacion_activa]);
                 $evaluacion_id = $pdo->lastInsertId();
                 registrarLog($_SESSION['usuario_id'], 'Crear evaluación', 'Evaluaciones', "Curso ID: $curso_id");
             } else {
                 $stmt = $pdo->prepare("
                     UPDATE evaluaciones
-                    SET nombre = ?, descripcion = ?, puntaje_minimo = ?, numero_intentos = ?
+                    SET nombre = ?, descripcion = ?, puntaje_minimo = ?, numero_intentos = ?, activo = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$nombre, $descripcion, $puntaje_minimo, $numero_intentos, $evaluacion_id]);
+                $stmt->execute([$nombre, $descripcion, $puntaje_minimo, $numero_intentos, $evaluacion_activa, $evaluacion_id]);
                 registrarLog($_SESSION['usuario_id'], 'Editar evaluación', 'Evaluaciones', "Evaluación ID: $evaluacion_id");
             }
             $mensaje = 'Evaluación guardada exitosamente';
@@ -167,8 +168,14 @@ if ($evaluacion) {
     
     <!-- Formulario crear/editar evaluación: el super administrador puede ajustar número de intentos para reactivar el cuestionario -->
     <div class="card shadow-sm mb-4">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h5 class="mb-0"><?php echo $evaluacion ? 'Editar' : 'Crear'; ?> Evaluación</h5>
+            <?php if ($evaluacion): ?>
+                <?php $esta_activa = isset($evaluacion['activo']) ? (int)$evaluacion['activo'] === 1 : true; ?>
+                <span class="badge bg-<?php echo $esta_activa ? 'success' : 'secondary'; ?>">
+                    <?php echo $esta_activa ? 'Activa (visible para estudiantes)' : 'Inactiva (no visible)'; ?>
+                </span>
+            <?php endif; ?>
         </div>
         <div class="card-body">
             <form method="POST">
@@ -188,6 +195,17 @@ if ($evaluacion) {
                     <textarea class="form-control" name="descripcion" rows="3"><?php echo htmlspecialchars($evaluacion['descripcion'] ?? ''); ?></textarea>
                 </div>
                 
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" name="evaluacion_activa" id="evaluacionActiva" value="1"
+                            <?php echo (!$evaluacion || (isset($evaluacion['activo']) ? (int)$evaluacion['activo'] === 1 : true)) ? 'checked' : ''; ?>>
+                        <label class="form-check-label" for="evaluacionActiva">
+                            <strong>Evaluación activa</strong>
+                            <span class="text-muted d-block small">Si está desactivada, los estudiantes no verán ni podrán presentar esta evaluación en el curso (opcional).</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="row">
                     <div class="col-md-6">
                         <div class="mb-3">

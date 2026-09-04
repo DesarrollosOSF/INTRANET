@@ -126,5 +126,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <?php if ($mensaje && $tipo_mensaje === 'success'): ?>
+    <script>
+        window.addEventListener('DOMContentLoaded', function () {
+            alert(<?php echo json_encode($mensaje, JSON_UNESCAPED_UNICODE); ?>);
+            window.location.href = <?php echo json_encode(BASE_URL . 'login.php', JSON_UNESCAPED_UNICODE); ?>;
+        });
+    </script>
+    <?php endif; ?>
 </body>
 </html>

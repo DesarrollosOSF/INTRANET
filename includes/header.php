@@ -35,26 +35,43 @@ if (!isset($_SESSION['usuario_id'])) {
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link spa-nav-link" href="<?php echo BASE_URL; ?>index.php">
+                        <a class="nav-link spa-nav-link" href="<?php echo BASE_URL; ?>index.php" >
                             <i class="bi bi-house me-1"></i>Dashboard
                         </a>
                     </li>
-                    <?php if (tienePermiso('ver_cursos')): ?>
                     <li class="nav-item">
-                        <a class="nav-link spa-nav-link" href="<?php echo BASE_URL; ?>cursos/index.php">
+                        <a class="nav-link spa-nav-link" href="<?php echo BASE_URL; ?>cursos/index.php" id="menu-cursos">
                             <i class="bi bi-book me-1"></i>Cursos
                         </a>
                     </li>
-                    <?php endif; ?>
+                    <li class="nav-item">
+                        <a class="nav-link spa-nav-link" href="<?php echo BASE_URL; ?>formacion/index.php" id="menu-formacion">
+                            <i class="bi bi-book me-1"></i>Formacion
+                        </a>
+                    </li>
                     <?php if (tienePermiso('ver_datos_interes') || tienePermiso('ver_documentos_interes')): ?>
                     <li class="nav-item">
-                        <a class="nav-link spa-nav-link" href="<?php echo BASE_URL; ?>datos_interes.php">
+                        <a class="nav-link spa-nav-link" href="<?php echo BASE_URL; ?>datos_interes.php" id="menu-documentos">
                             <i class="bi bi-folder2-open me-1"></i>Documentos de interés
                         </a>
                     </li>
                     <?php endif; ?>
+                    <?php if (file_exists(__DIR__ . '/../experiencia/sections.php')): ?>
+                    <li class="nav-item">
+                        <a class="nav-link spa-nav-link" href="<?php echo BASE_URL; ?>experiencia/index.php" id="menu-experiencia">
+                            <i class="bi bi-heart me-1"></i>Experiencia
+                        </a>
+                    </li>
+                    <?php endif; ?>
+                    <?php if (tienePermiso('ver_sst')): ?>
+                    <li class="nav-item">
+                        <a class="nav-link spa-nav-link" href="<?php echo BASE_URL; ?>sst/index.php" id="menu-sst">
+                            <i class="bi bi-shield-check me-1"></i>SST
+                        </a>
+                    </li>
+                    <?php endif; ?>
                     <?php
-                    $tiene_admin = tienePermiso('gestionar_usuarios') || tienePermiso('gestionar_perfiles_permisos') || tienePermiso('gestionar_cursos') || tienePermiso('gestionar_comunicados') || tienePermiso('gestionar_dependencias') || tienePermiso('gestionar_documentos_interes') || tienePermiso('ver_reportes');
+                    $tiene_admin = tienePermiso('gestionar_usuarios') || tienePermiso('gestionar_perfiles_permisos') || tienePermiso('gestionar_cursos') || tienePermiso('gestionar_comunicados') || tienePermiso('gestionar_dependencias') || tienePermiso('gestionar_documentos_interes') || tienePermiso('gestionar_experiencia') || tienePermiso('gestionar_sst') || tienePermiso('ver_reportes');
                     if ($tiene_admin):
                     ?>
                     <li class="nav-item dropdown">
@@ -82,9 +99,24 @@ if (!isset($_SESSION['usuario_id'])) {
                                 <i class="bi bi-folder2-open me-2"></i>Documentos de interés
                             </a></li>
                             <?php endif; ?>
+                            <?php if (tienePermiso('gestionar_experiencia')): ?>
+                            <li><a class="dropdown-item spa-nav-link" href="<?php echo BASE_URL; ?>admin/experiencia.php">
+                                <i class="bi bi-heart me-2"></i>Gestión de Experiencia
+                            </a></li>
+                            <?php endif; ?>
+                            <?php if (tienePermiso('gestionar_sst')): ?>
+                            <li><a class="dropdown-item spa-nav-link" href="<?php echo BASE_URL; ?>admin/sst.php">
+                                <i class="bi bi-shield-check me-2"></i>Gestión SST
+                            </a></li>
+                            <?php endif; ?>
                             <?php if (tienePermiso('gestionar_cursos')): ?>
                             <li><a class="dropdown-item spa-nav-link" href="<?php echo BASE_URL; ?>admin/cursos.php">
                                 <i class="bi bi-book-half me-2"></i>Gestión de Cursos
+                            </a></li>
+                            <?php endif; ?>
+                            <?php if (tienePermiso('gestionar_formacion')): ?>
+                            <li><a class="dropdown-item spa-nav-link" href="<?php echo BASE_URL; ?>admin/formacion.php">
+                                <i class="bi bi-book-half me-2"></i>Gestión de Formacion
                             </a></li>
                             <?php endif; ?>
                             <?php if (tienePermiso('gestionar_comunicados')): ?>
@@ -99,6 +131,11 @@ if (!isset($_SESSION['usuario_id'])) {
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item spa-nav-link" href="<?php echo BASE_URL; ?>admin/reportes.php">
                                 <i class="bi bi-graph-up me-2"></i>Reportes
+                            </a></li>
+                            <?php endif; ?>
+                            <?php if (tienePermiso('ver_auditoria')): ?>
+                            <li><a class="dropdown-item spa-nav-link" href="<?php echo BASE_URL; ?>admin/auditoria.php">
+                                <i class="bi bi-book-half me-2"></i>Auditoria
                             </a></li>
                             <?php endif; ?>
                             <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'super_admin'): ?>
@@ -120,6 +157,7 @@ if (!isset($_SESSION['usuario_id'])) {
                             <li><a class="dropdown-item spa-nav-link" href="<?php echo BASE_URL; ?>perfil.php">
                                 <i class="bi bi-person me-2"></i>Mi Perfil
                             </a></li>
+    
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>logout.php">
                                 <i class="bi bi-box-arrow-right me-2"></i>Cerrar Sesión

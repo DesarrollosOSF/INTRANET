@@ -29,27 +29,33 @@ if (!$documento) {
 $upload_dir = rtrim(UPLOAD_PATH_DOCUMENTOS_INTERES, '/\\') . DIRECTORY_SEPARATOR;
 $ext_permitidas = ALLOWED_DOCUMENTOS_INTERES_EXT;
 $mimes_permitidos = ALLOWED_DOCUMENTOS_INTERES_MIMES;
-$max_size = MAX_DOCUMENT_SIZE;
+$max_documento_mb = (int) ceil(MAX_DOCUMENT_SIZE / (1024 * 1024));
+$max_video_mb = (int) ceil(MAX_VIDEO_SIZE / (1024 * 1024));
 if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
 
 $mensaje = '';
 $tipo_mensaje = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (subidaRechazadaPorLimiteServidor()) {
+        $mensaje = mensajeLimiteSubidaServidor('video');
+        $tipo_mensaje = 'danger';
+    }
     $accion = $_POST['accion'] ?? '';
     
     if ($accion === 'agregar_modulo') {
         $titulo = trim(sanitizar($_POST['titulo_modulo'] ?? ''));
         $descripcion = trim(sanitizar($_POST['descripcion_modulo'] ?? ''));
         $orden = (int)($_POST['orden_modulo'] ?? 0);
+        $solo_visualizacion = isset($_POST['solo_visualizacion']) ? 1 : 0;
         if ($titulo !== '') {
             try {
-                $stmt = $pdo->prepare("INSERT INTO modulos_documento_interes (documento_interes_id, titulo, descripcion, orden) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$documento_id, $titulo, $descripcion, $orden]);
+                $stmt = $pdo->prepare("INSERT INTO modulos_documento_interes (documento_interes_id, titulo, descripcion, orden, solo_visualizacion) VALUES (?, ?, ?, ?, ?)");
+                $stmt->execute([$documento_id, $titulo, $descripcion, $orden, $solo_visualizacion]);
                 $mensaje = 'Módulo creado.';
                 $tipo_mensaje = 'success';
             } catch (Exception $e) {
-                $mensaje = 'Error al crear módulo. Asegúrese de haber ejecutado la migración de módulos de documentos de interés en la base de datos.';
+                $mensaje = 'Error al crear módulo. Ejecute la migración docs/modulo_documento_solo_visualizacion.sql en la base de datos.';
                 $tipo_mensaje = 'danger';
             }
         }
@@ -58,11 +64,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $titulo = trim(sanitizar($_POST['titulo_modulo'] ?? ''));
         $descripcion = trim(sanitizar($_POST['descripcion_modulo'] ?? ''));
         $orden = (int)($_POST['orden_modulo'] ?? 0);
+        $solo_visualizacion = isset($_POST['solo_visualizacion']) ? 1 : 0;
         if ($titulo !== '') {
-            $stmt = $pdo->prepare("UPDATE modulos_documento_interes SET titulo = ?, descripcion = ?, orden = ? WHERE id = ? AND documento_interes_id = ?");
-            $stmt->execute([$titulo, $descripcion, $orden, $modulo_id, $documento_id]);
-            $mensaje = 'Módulo actualizado.';
-            $tipo_mensaje = 'success';
+            try {
+                $stmt = $pdo->prepare("UPDATE modulos_documento_interes SET titulo = ?, descripcion = ?, orden = ?, solo_visualizacion = ? WHERE id = ? AND documento_interes_id = ?");
+                $stmt->execute([$titulo, $descripcion, $orden, $solo_visualizacion, $modulo_id, $documento_id]);
+                $mensaje = 'Módulo actualizado.';
+                $tipo_mensaje = 'success';
+            } catch (Exception $e) {
+                $mensaje = 'Error al actualizar módulo. Ejecute la migración docs/modulo_documento_solo_visualizacion.sql en la base de datos.';
+                $tipo_mensaje = 'danger';
+            }
         }
     } elseif ($accion === 'eliminar_modulo') {
         $modulo_id = (int)$_POST['modulo_id'];
@@ -79,21 +91,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($nombre === '') {
             $mensaje = 'Nombre del archivo es obligatorio.';
             $tipo_mensaje = 'danger';
-        } elseif (!isset($_FILES['archivo']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
-            $mensaje = 'Debe seleccionar un archivo (PDF, Word o Excel).';
+        } elseif (!isset($_FILES['archivo'])) {
+            $mensaje = mensajeLimiteSubidaServidor('video');
+            $tipo_mensaje = 'danger';
+        } elseif ($_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
+            $mensaje = mensajeErrorSubidaPhp($_FILES['archivo']['error']);
             $tipo_mensaje = 'danger';
         } else {
-            $ext = strtolower(pathinfo($_FILES['archivo']['name'], PATHINFO_EXTENSION));
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mime = finfo_file($finfo, $_FILES['archivo']['tmp_name']);
-            finfo_close($finfo);
-            if (!in_array($ext, $ext_permitidas) || !in_array($mime, $mimes_permitidos)) {
-                $mensaje = 'Tipo no permitido. Use PDF, Word (.doc, .docx) o Excel (.xls, .xlsx).';
-                $tipo_mensaje = 'danger';
-            } elseif ($_FILES['archivo']['size'] > $max_size) {
-                $mensaje = 'El archivo supera 10 MB.';
+            $validacion = validarArchivoDocumentosInteres($_FILES['archivo']);
+            if (!$validacion['valido']) {
+                $mensaje = $validacion['mensaje'];
                 $tipo_mensaje = 'danger';
             } else {
+                $ext = $validacion['ext'];
                 $archivo_nombre = uniqid() . '.' . $ext;
                 if (move_uploaded_file($_FILES['archivo']['tmp_name'], $upload_dir . $archivo_nombre)) {
                     $stmt = $pdo->prepare("INSERT INTO archivos_documento_interes (modulo_id, nombre, descripcion, archivo, orden, usuario_id) VALUES (?, ?, ?, ?, ?, ?)");
@@ -101,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $mensaje = 'Archivo agregado.';
                     $tipo_mensaje = 'success';
                 } else {
-                    $mensaje = 'Error al guardar el archivo.';
+                    $mensaje = 'Error al guardar el archivo en el servidor. Revise permisos de escritura en uploads/documentos_interes/.';
                     $tipo_mensaje = 'danger';
                 }
             }
@@ -186,6 +196,11 @@ foreach ($archivos as $a) {
                                     <div>
                                         <strong><?php echo htmlspecialchars($mod['titulo']); ?></strong>
                                         <span class="badge bg-secondary ms-2"><?php echo $cant; ?> archivo(s)</span>
+                                        <?php if (!empty($mod['solo_visualizacion'])): ?>
+                                            <span class="badge bg-info text-dark ms-1">Solo visualización</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-success ms-1">Descarga</span>
+                                        <?php endif; ?>
                                         <?php if (!empty($mod['descripcion'])): ?>
                                             <p class="mb-0 small text-muted"><?php echo htmlspecialchars($mod['descripcion']); ?></p>
                                         <?php endif; ?>
@@ -214,7 +229,7 @@ foreach ($archivos as $a) {
                 </div>
                 <div class="card-body">
                     <?php if (empty($modulos)): ?>
-                        <p class="text-muted">Cree primero un módulo y luego agregue archivos (PDF, Word, Excel).</p>
+                        <p class="text-muted">Cree primero un módulo y luego agregue archivos (PDF, Office o video).</p>
                     <?php elseif (empty($archivos)): ?>
                         <p class="text-muted">No hay archivos. Use «Agregar archivo» y seleccione el módulo.</p>
                     <?php else: ?>
@@ -226,12 +241,24 @@ foreach ($archivos as $a) {
                                 <p class="small text-muted">Sin archivos.</p>
                             <?php else: ?>
                                 <div class="list-group mb-3">
-                                    <?php foreach ($lista as $ar): 
+                                    <?php foreach ($lista as $ar):
                                         $url_download = UPLOAD_URL . 'documentos_interes/' . $ar['archivo'];
+                                        $ext_archivo = strtolower(pathinfo($ar['archivo'] ?? '', PATHINFO_EXTENSION));
+                                        if ($ext_archivo === 'pdf') {
+                                            $icono = 'file-earmark-pdf';
+                                        } elseif (in_array($ext_archivo, ['doc', 'docx'], true)) {
+                                            $icono = 'file-earmark-word';
+                                        } elseif (in_array($ext_archivo, ['xls', 'xlsx'], true)) {
+                                            $icono = 'file-earmark-excel';
+                                        } elseif (in_array($ext_archivo, ['ppt', 'pptx'], true)) {
+                                            $icono = 'file-earmark-slides';
+                                        } else {
+                                            $icono = 'file-earmark';
+                                        }
                                     ?>
                                         <div class="list-group-item d-flex justify-content-between align-items-start">
                                             <div class="flex-grow-1">
-                                                <i class="bi bi-file-earmark-pdf me-2"></i>
+                                                <i class="bi bi-<?php echo $icono; ?> me-2"></i>
                                                 <strong><?php echo htmlspecialchars($ar['nombre']); ?></strong>
                                                 <?php if (!empty($ar['descripcion'])): ?>
                                                     <p class="mb-1 small text-muted"><?php echo htmlspecialchars($ar['descripcion']); ?></p>
@@ -264,7 +291,7 @@ foreach ($archivos as $a) {
                     <?php if (!empty($documento['descripcion'])): ?>
                         <p class="small text-muted"><?php echo nl2br(htmlspecialchars($documento['descripcion'])); ?></p>
                     <?php endif; ?>
-                    <p class="small mb-0">Aquí se gestionan los módulos y los archivos (PDF, Word, Excel) de este documento de interés.</p>
+                    <p class="small mb-0">Aquí se gestionan los módulos y los archivos (PDF, Office o video) de este documento de interés.</p>
                 </div>
             </div>
         </div>
@@ -294,6 +321,16 @@ foreach ($archivos as $a) {
                     <div class="mb-3">
                         <label class="form-label">Orden</label>
                         <input type="number" class="form-control" name="orden_modulo" id="ordenModulo" value="0" min="0">
+                    </div>
+                    <div class="mb-0">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="solo_visualizacion" id="soloVisualizacionModulo" value="1">
+                            <label class="form-check-label" for="soloVisualizacionModulo">Solo visualización</label>
+                        </div>
+                        <div class="form-text">
+                            Desactivado: los archivos se descargan al hacer clic (ej. formatos y plantillas).
+                            Activado: se abren en pantalla completa para consulta, sin descarga directa (ej. cumpleaños, colaborador del mes).
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -334,8 +371,9 @@ foreach ($archivos as $a) {
                         <textarea class="form-control" name="descripcion_archivo" rows="2"></textarea>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Archivo * (PDF, Word, Excel. Máx. 10 MB)</label>
-                        <input type="file" class="form-control" name="archivo" accept=".pdf,.doc,.docx,.xls,.xlsx" required>
+                        <label class="form-label">Archivo * (PDF, Office o video)</label>
+                        <input type="file" class="form-control" name="archivo" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.mp4,.webm,.ogg,video/mp4,video/webm,video/ogg" required>
+                        <div class="form-text">Documentos hasta <?php echo $max_documento_mb; ?> MB. Videos hasta <?php echo $max_video_mb; ?> MB.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Orden</label>
@@ -359,6 +397,7 @@ function editarModulo(mod) {
     document.getElementById('tituloModulo').value = mod.titulo;
     document.getElementById('descripcionModulo').value = mod.descripcion || '';
     document.getElementById('ordenModulo').value = mod.orden || 0;
+    document.getElementById('soloVisualizacionModulo').checked = !!parseInt(mod.solo_visualizacion || 0, 10);
     new bootstrap.Modal(document.getElementById('modalModulo')).show();
 }
 document.getElementById('modalModulo').addEventListener('hidden.bs.modal', function() {
@@ -366,6 +405,7 @@ document.getElementById('modalModulo').addEventListener('hidden.bs.modal', funct
     document.getElementById('modalModuloTitle').textContent = 'Nuevo módulo';
     document.getElementById('accionModulo').value = 'agregar_modulo';
     document.getElementById('moduloId').value = '';
+    document.getElementById('soloVisualizacionModulo').checked = false;
 });
 </script>
 

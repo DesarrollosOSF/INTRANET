@@ -227,7 +227,7 @@ $dependencias = $pdo->query("SELECT id, nombre FROM dependencias WHERE activo = 
                     <div class="mb-3">
                         <label class="form-label">Imagen representativa</label>
                         <input type="file" class="form-control" name="imagen" id="docImagen" accept="image/*">
-                        <small class="text-muted">Máx. 10 MB. JPG, PNG, GIF, WEBP</small>
+                        <small class="text-muted">Máx. <?php echo (int) ceil(MAX_IMAGE_SIZE / (1024 * 1024)); ?> MB. JPG, PNG, GIF, WEBP</small>
                         <div id="docImagenPreview" class="mt-2"></div>
                     </div>
                 </div>
