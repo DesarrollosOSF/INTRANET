@@ -384,81 +384,81 @@ if (!empty($cursos)) {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($cursos as $curso): ?>
-                            <?php
-                            $entidad_label = $etiquetas_entidad[$curso['tipo_entidad']] ?? $curso['tipo_entidad'];
-                            if ($curso['tipo_entidad'] === 'otro' && !empty($curso['entidad_otro'])) {
-                                $entidad_label = htmlspecialchars($curso['entidad_otro']);
-                            }
-                            $pct = $curso['total_inscritos'] > 0
-                                ? round(($curso['total_completados'] / $curso['total_inscritos']) * 100)
-                                : 0;
-                            ?>
-                            <tr>
-                                <td>
-                                    <div class="fw-semibold">
-                                        <?php echo htmlspecialchars($curso['nombre']); ?>
-                                        <?php if ($curso['obligatorio']): ?>
-                                            <span class="badge bg-danger ms-1">Obligatorio</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                                <td><span class="badge bg-info text-dark"><?php echo $entidad_label; ?></span></td>
-                                <td>
-                                    <?php if ($curso['modalidad'] === 'solo_evaluacion'): ?>
-                                        <span class="badge bg-warning text-dark">Solo evaluación</span>
-                                    <?php else: ?>
-                                        <span class="badge bg-secondary">Plataforma</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="badge bg-dark-subtle text-dark-emphasis">Usuarios seleccionados</span>
-                                </td>
-                                <td class="small text-muted" style="max-width:220px;">
-                                    <?php echo htmlspecialchars($curso['usuarios_nombres'] ?? 'Sin asignar'); ?>
-                                </td>
-                                <td class="small text-nowrap">
-                                    <?php echo $curso['fecha_inicio'] ? date('d/m/Y', strtotime($curso['fecha_inicio'])) : '—'; ?>
-                                    &rarr;
-                                    <?php echo $curso['fecha_cierre'] ? date('d/m/Y', strtotime($curso['fecha_cierre'])) : '—'; ?>
-                                </td>
-                                <td style="min-width:120px;">
-                                    <div class="progress" style="height:6px;">
-                                        <div class="progress-bar" style="width:<?php echo $pct; ?>%"></div>
-                                    </div>
-                                    <div class="small text-muted"><?php echo $curso['total_completados']; ?>/<?php echo $curso['total_inscritos']; ?> (<?php echo $pct; ?>%)</div>
-                                </td>
-                                <td>
-                                    <span class="badge bg-<?php echo $curso['activo'] ? 'success' : 'secondary'; ?>">
-                                        <?php echo $curso['activo'] ? 'Activo' : 'Inactivo'; ?>
-                                    </span>
-                                </td>
-                                <td class="text-nowrap">
-                                    <a href="formacion_detalle.php?id=<?php echo $curso['id']; ?>" class="btn btn-sm btn-outline-primary" title="Gestionar contenido y evaluación">
-                                        <i class="bi bi-folder2-open"></i>
-                                    </a>
-                                    <button class="btn btn-sm btn-warning" onclick='editarCurso(<?php echo json_encode($curso + ['usuarios' => $usuarios_por_curso[$curso['id']] ?? []]); ?>)'>
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    <form method="POST" class="d-inline">
-                                        <input type="hidden" name="accion" value="cambiar_estado">
-                                        <input type="hidden" name="id" value="<?php echo $curso['id']; ?>">
-                                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Activar/Desactivar">
-                                            <i class="bi bi-power"></i>
-                                        </button>
-                                    </form>
-                                    <form method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar el curso «<?php echo htmlspecialchars(addslashes($curso['nombre'])); ?>»? Se perderán inscripciones y avances asociados.');">
-                                        <input type="hidden" name="accion" value="eliminar">
-                                        <input type="hidden" name="id" value="<?php echo $curso['id']; ?>">
-                                        <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></button>
-                                    </form>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        <?php if (empty($cursos)): ?>
-                            <tr><td colspan="9" class="text-center text-muted py-4">No hay cursos de formación registrados.</td></tr>
-                        <?php endif; ?>
-                    </tbody>
+    <?php foreach ($cursos as $curso): ?>
+        <?php
+        $entidad_label = $etiquetas_entidad[$curso['tipo_entidad']] ?? $curso['tipo_entidad'];
+        if ($curso['tipo_entidad'] === 'otro' && !empty($curso['entidad_otro'])) {
+            $entidad_label = htmlspecialchars($curso['entidad_otro']);
+        }
+        $pct = $curso['total_inscritos'] > 0
+            ? round(($curso['total_completados'] / $curso['total_inscritos']) * 100)
+            : 0;
+        ?>
+        <tr>
+            <td>
+                <div class="fw-semibold">
+                    <?php echo htmlspecialchars($curso['nombre']); ?>
+                    <?php if ($curso['obligatorio']): ?>
+                        <span class="badge bg-danger ms-1">Obligatorio</span>
+                    <?php endif; ?>
+                </div>
+            </td>
+            <td><span class="badge bg-info text-dark"><?php echo $entidad_label; ?></span></td>
+            <td>
+                <?php if ($curso['modalidad'] === 'solo_evaluacion'): ?>
+                    <span class="badge bg-warning text-dark">Solo evaluación</span>
+                <?php else: ?>
+                    <span class="badge bg-secondary">Plataforma</span>
+                <?php endif; ?>
+            </td>
+            <td>
+                <span class="badge bg-dark-subtle text-dark-emphasis">Usuarios seleccionados</span>
+            </td>
+            <td class="small text-muted" style="max-width:220px;">
+                <?php echo htmlspecialchars($curso['usuarios_nombres'] ?? 'Sin asignar'); ?>
+            </td>
+            <td class="small text-nowrap">
+                <?php echo $curso['fecha_inicio'] ? date('d/m/Y', strtotime($curso['fecha_inicio'])) : '—'; ?>
+                &rarr;
+                <?php echo $curso['fecha_cierre'] ? date('d/m/Y', strtotime($curso['fecha_cierre'])) : '—'; ?>
+            </td>
+            <td style="min-width:120px;">
+                <div class="progress" style="height:6px;">
+                    <div class="progress-bar" style="width:<?php echo $pct; ?>%"></div>
+                </div>
+                <div class="small text-muted"><?php echo $curso['total_completados']; ?>/<?php echo $curso['total_inscritos']; ?> (<?php echo $pct; ?>%)</div>
+            </td>
+            <td>
+                <span class="badge bg-<?php echo $curso['activo'] ? 'success' : 'secondary'; ?>">
+                    <?php echo $curso['activo'] ? 'Activo' : 'Inactivo'; ?>
+                </span>
+            </td>
+            <td class="text-nowrap">
+                <a href="formacion_detalle.php?id=<?php echo $curso['id']; ?>" class="btn btn-sm btn-outline-primary" title="Gestionar contenido y evaluación">
+                    <i class="bi bi-folder2-open"></i>
+                </a>
+                
+                <!-- BOTÓN DE EDITAR -->
+                <button type="button" class="btn btn-sm btn-warning" onclick='editarCurso(<?php echo json_encode($curso + ['usuarios' => $usuarios_por_curso[$curso['id']] ?? []], JSON_HEX_APOS | JSON_HEX_QUOT); ?>)' title="Editar curso">
+                    <i class="bi bi-pencil"></i>
+                </button>
+
+                <form method="POST" class="d-inline">
+                    <input type="hidden" name="accion" value="cambiar_estado">
+                    <input type="hidden" name="id" value="<?php echo $curso['id']; ?>">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Activar/Desactivar">
+                        <i class="bi bi-power"></i>
+                    </button>
+                </form>
+                <form method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar el curso «<?php echo htmlspecialchars(addslashes($curso['nombre'])); ?>»? Se perderán inscripciones y avances asociados.');">
+                    <input type="hidden" name="accion" value="eliminar">
+                    <input type="hidden" name="id" value="<?php echo $curso['id']; ?>">
+                    <button type="submit" class="btn btn-sm btn-danger" title="Eliminar curso"><i class="bi bi-trash"></i></button>
+                </form>
+            </td>
+        </tr>
+    <?php endforeach; ?>
+</tbody>
                 </table>
             </div>
 
@@ -728,8 +728,6 @@ if (!empty($cursos)) {
     document.getElementById('campoEntidadOtro').classList.toggle('d-none', curso.tipo_entidad !== 'otro');
     document.getElementById('entidadOtro').value = curso.entidad_otro || '';
     document.querySelector('input[name="modalidad"][value="' + curso.modalidad + '"]').checked = true;
-    // El destinatario se gestiona usuario por usuario.
-    document.querySelector('input[name="encuesta_url"]').value = curso.encuesta_url || '';
     document.querySelector('input[name="fecha_inicio"]').value = curso.fecha_inicio || '';
     document.querySelector('input[name="fecha_cierre"]').value = curso.fecha_cierre || '';
     document.getElementById('obligatorioCurso').checked = curso.obligatorio == 1;
