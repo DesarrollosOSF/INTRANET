@@ -23,6 +23,19 @@ $es_solo_evaluacion = $curso['modalidad'] === 'solo_evaluacion';
 $mensaje = '';
 $tipo_mensaje = '';
 
+// ==========================================================
+// Curso vencido: si ya pasó fecha_cierre y no está completado,
+// se bloquea todo acceso a contenido y evaluaciones.
+// ==========================================================
+$vencido = false;
+if (!$curso['completado'] && $curso['fecha_cierre']) {
+    $hoy_vencido = new DateTime();
+    $cierre_vencido = new DateTime($curso['fecha_cierre']);
+    if ($cierre_vencido < $hoy_vencido) {
+        $vencido = true;
+    }
+}
+
 $page_title = $curso['nombre'];
 require_once '../includes/header.php';
 
@@ -93,7 +106,12 @@ function estadoEvaluacion(PDO $pdo, int $inscripcion_id, int $evaluacion_id): ar
 $resultado_intento = null;
 $evaluacion_recien_enviada = null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'presentar_evaluacion') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'presentar_evaluacion' && $vencido) {
+    $mensaje = 'Este curso está vencido. Ya no es posible presentar evaluaciones.';
+    $tipo_mensaje = 'danger';
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'presentar_evaluacion' && !$vencido) {
     $evaluacion_id = (int)$_POST['evaluacion_id'];
     $stmt = $pdo->prepare("SELECT * FROM formacion_evaluaciones WHERE id = ? AND curso_id = ?");
     $stmt->execute([$evaluacion_id, $curso_id]);
@@ -240,18 +258,36 @@ if ($es_solo_evaluacion) {
                     <a href="certificado.php?inscripcion_id=<?php echo $inscripcion_id; ?>" target="_blank" class="btn btn-outline-primary">
                         <i class="bi bi-download me-1"></i>Descargar asistencia
                     </a>
-                    <?php if ($encuesta_interna && !$encuesta_ya_respondida): ?>
-                        <a href="encuesta.php?id=<?php echo $inscripcion_id; ?>" class="btn btn-primary"><i class="bi bi-clipboard-check me-1"></i>Responder encuesta de satisfacción</a>
-                    <?php elseif ($encuesta_interna && $encuesta_ya_respondida): ?>
-                        <span class="btn btn-outline-success disabled"><i class="bi bi-check-circle me-1"></i>Encuesta respondida</span>
-                    <?php elseif (!$encuesta_interna && $curso['encuesta_url']): ?>
-                        <a href="registrar_encuesta.php?inscripcion_id=<?php echo $inscripcion_id; ?>" target="_blank" class="btn btn-primary"><i class="bi bi-box-arrow-up-right me-1"></i>Responder encuesta de satisfacción</a>
+                    <?php if (!$evaluacion_general): ?>
+                        <?php // Sin evaluación general no hay botón "Presentar Evaluación" en el sidebar,
+                              // así que la encuesta se ofrece aquí en el banner. Si hay evaluación general,
+                              // la encuesta se muestra en el menú lateral justo después de ese botón. ?>
+                        <?php if ($encuesta_interna && !$encuesta_ya_respondida): ?>
+                            <a href="encuesta.php?id=<?php echo $inscripcion_id; ?>" class="btn btn-primary"><i class="bi bi-clipboard-check me-1"></i>Responder encuesta de satisfacción</a>
+                        <?php elseif ($encuesta_interna && $encuesta_ya_respondida): ?>
+                            <span class="btn btn-outline-success disabled"><i class="bi bi-check-circle me-1"></i>Encuesta respondida</span>
+                        <?php elseif (!$encuesta_interna && $curso['encuesta_url']): ?>
+                            <a href="registrar_encuesta.php?inscripcion_id=<?php echo $inscripcion_id; ?>" target="_blank" class="btn btn-primary"><i class="bi bi-box-arrow-up-right me-1"></i>Responder encuesta de satisfacción</a>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
     <?php endif; ?>
 
+    <?php if ($vencido): ?>
+        <div class="card border-danger shadow-sm mb-4">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-calendar-x text-danger" style="font-size:2.8rem;"></i>
+                <h4 class="mt-3">Este curso venció</h4>
+                <p class="text-muted mb-0">
+                    La fecha límite era el <strong><?php echo date('d/m/Y', strtotime($curso['fecha_cierre'])); ?></strong>.
+                    Ya no es posible acceder al contenido ni presentar evaluaciones de este curso.
+                    Si consideras que esto es un error, comunícate con Talento Humano.
+                </p>
+            </div>
+        </div>
+    <?php else: ?>
     <div class="row g-3 formacion-layout">
         <!-- ======================= SIDEBAR ======================= -->
         <div class="col-12 col-lg-4 col-xl-3">
@@ -317,6 +353,16 @@ if ($es_solo_evaluacion) {
                         <button type="button" class="btn btn-primary w-100" data-target="panel-general" id="btnPresentarEvaluacionGeneral">
                             <i class="bi bi-clipboard-check me-1"></i>Presentar Evaluación
                         </button>
+                    <?php endif; ?>
+
+                    <?php if ($encuesta_interna): ?>
+                        <?php if ($encuesta_ya_respondida): ?>
+                            <span class="btn btn-outline-success w-100 disabled mt-2"><i class="bi bi-check-circle me-1"></i>Encuesta respondida</span>
+                        <?php else: ?>
+                            <a href="encuesta.php?id=<?php echo $inscripcion_id; ?>" class="btn btn-outline-primary w-100 mt-2"><i class="bi bi-clipboard-check me-1"></i>Encuesta de satisfacción</a>
+                        <?php endif; ?>
+                    <?php elseif ($curso['encuesta_url']): ?>
+                        <a href="registrar_encuesta.php?inscripcion_id=<?php echo $inscripcion_id; ?>" target="_blank" class="btn btn-outline-primary w-100 mt-2"><i class="bi bi-box-arrow-up-right me-1"></i>Encuesta de satisfacción</a>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
@@ -453,6 +499,7 @@ if ($es_solo_evaluacion) {
             </div>
         </div>
     </div>
+    <?php endif; ?>
 </div>
 
 <style>

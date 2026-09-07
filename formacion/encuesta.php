@@ -11,13 +11,15 @@ $stmt = $pdo->prepare("
     SELECT fi.*, fc.nombre AS curso_nombre, fc.id AS curso_id
     FROM formacion_inscripciones fi
     JOIN formacion_cursos fc ON fc.id = fi.curso_id
-    WHERE fi.id = ? AND fi.usuario_id = ? AND fi.completado = 1
+    WHERE fi.id = ? AND fi.usuario_id = ? 
+    
 ");
+// AND fi.completado = 1
 $stmt->execute([$inscripcion_id, $usuario_id]);
 $inscripcion = $stmt->fetch();
 if (!$inscripcion) { header('Location: index.php'); exit; }
 
-$stmt = $pdo->prepare("SELECT * FROM formacion_encuestas WHERE curso_id = ? AND activo = 1");
+$stmt = $pdo->prepare("SELECT * FROM formacion_encuestas WHERE curso_id = ? ");
 $stmt->execute([$inscripcion['curso_id']]);
 $encuesta = $stmt->fetch();
 if (!$encuesta) { header('Location: detalle_curso.php?id=' . $inscripcion['curso_id']); exit; }
