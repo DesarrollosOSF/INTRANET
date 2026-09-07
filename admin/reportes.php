@@ -7,6 +7,333 @@ $additional_css = ['assets/css/admin.css'];
 
 $pdo = getDBConnection();
 
+
+// Endpoint para descargar en PDF las respuestas de un intento
+if (isset($_GET['descargar_pdf'])) {
+    $intento_id = isset($_GET['intento_id']) ? (int)$_GET['intento_id'] : 0;
+
+    if ($intento_id <= 0) {
+        http_response_code(400);
+        exit('Intento inválido.');
+    }
+
+    // Datos generales del intento, usuario y curso.
+    $stmt = $pdo->prepare("
+        SELECT
+            ie.id AS intento_id,
+            ie.puntaje_obtenido,
+            ie.puntaje_total,
+            ie.estado,
+            ie.fecha_finalizacion,
+            u.nombre_completo,
+            u.email,
+            c.nombre AS curso_nombre,
+            e.id AS evaluacion_id
+        FROM intentos_evaluacion ie
+        INNER JOIN inscripciones i ON i.id = ie.inscripcion_id
+        INNER JOIN usuarios u ON u.id = i.usuario_id
+        INNER JOIN evaluaciones e ON e.id = ie.evaluacion_id
+        INNER JOIN cursos c ON c.id = e.curso_id
+        WHERE ie.id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$intento_id]);
+    $intento = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$intento) {
+        http_response_code(404);
+        exit('No se encontró el intento solicitado.');
+    }
+
+    // Se obtiene exactamente la misma respuesta más reciente por pregunta
+    // que se utiliza en el detalle del modal.
+    $stmt = $pdo->prepare("
+        SELECT
+            p.pregunta,
+            ou.texto AS respuesta_usuario,
+            COALESCE(ou.es_correcta, 0) AS correcta
+        FROM intentos_evaluacion ie
+        INNER JOIN preguntas p ON p.evaluacion_id = ie.evaluacion_id
+        LEFT JOIN (
+            SELECT ru1.intento_id, ru1.pregunta_id, ru1.opcion_id
+            FROM respuestas_usuario ru1
+            INNER JOIN (
+                SELECT intento_id, pregunta_id, MAX(id) AS max_id
+                FROM respuestas_usuario
+                WHERE intento_id = ?
+                GROUP BY intento_id, pregunta_id
+            ) ru2 ON ru1.id = ru2.max_id
+        ) ru_ult ON ru_ult.intento_id = ie.id AND ru_ult.pregunta_id = p.id
+        LEFT JOIN opciones_respuesta ou ON ou.id = ru_ult.opcion_id
+        WHERE ie.id = ?
+        ORDER BY p.orden ASC, p.id ASC
+    ");
+    $stmt->execute([$intento_id, $intento_id]);
+    $preguntas_pdf = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!$preguntas_pdf) {
+        http_response_code(404);
+        exit('No hay preguntas asociadas a este intento.');
+    }
+
+    /*
+     * Generador PDF ligero sin dependencias externas.
+     * Usa las fuentes PDF estándar (Helvetica) y convierte UTF-8 a
+     * Windows-1252 para conservar tildes y caracteres habituales en español.
+     */
+    $pdf_escape = function ($text) {
+        $text = (string)$text;
+        if (function_exists('iconv')) {
+            $converted = @iconv('UTF-8', 'Windows-1252//TRANSLIT', $text);
+            if ($converted !== false) {
+                $text = $converted;
+            }
+        } elseif (function_exists('utf8_decode')) {
+            $text = utf8_decode($text);
+        }
+        return str_replace(
+            ['\\', '(', ')', "\r", "\n"],
+            ['\\\\', '\\(', '\\)', '', ' '],
+            $text
+        );
+    };
+
+    $wrap_pdf = function ($text, $maxChars = 88) {
+        $text = preg_replace('/\s+/u', ' ', trim((string)$text));
+        if ($text === '') {
+            return ['Sin respuesta'];
+        }
+
+        $words = preg_split('/\s+/u', $text);
+        $lines = [];
+        $line = '';
+
+        foreach ($words as $word) {
+            if ($line === '') {
+                $line = $word;
+            } elseif (function_exists('mb_strlen') && mb_strlen($line . ' ' . $word, 'UTF-8') <= $maxChars) {
+                $line .= ' ' . $word;
+            } elseif (!function_exists('mb_strlen') && strlen($line . ' ' . $word) <= $maxChars) {
+                $line .= ' ' . $word;
+            } else {
+                $lines[] = $line;
+                $line = $word;
+            }
+        }
+
+        if ($line !== '') {
+            $lines[] = $line;
+        }
+
+        return $lines ?: [''];
+    };
+
+    $score = ($intento['puntaje_total'] !== null && (float)$intento['puntaje_total'] > 0)
+        ? ((float)$intento['puntaje_obtenido'] / (float)$intento['puntaje_total']) * 100
+        : 0;
+
+    $estado = (string)($intento['estado'] ?? '');
+    $fecha = !empty($intento['fecha_finalizacion'])
+        ? date('d/m/Y H:i', strtotime($intento['fecha_finalizacion']))
+        : 'No registrada';
+
+    $pages = [];
+    $current = [];
+    $y = 800;
+    $lineHeight = 15;
+
+    $add_line = function ($text, $fontSize = 10, $bold = false, $spacing = 15) use (&$current, &$y, $pdf_escape) {
+        if ($y < 55) {
+            $GLOBALS['__pdf_page_break'] = true;
+            return false;
+        }
+        $current[] = [$text, $fontSize, $bold, $y];
+        $y -= $spacing;
+        return true;
+    };
+
+    $start_page = function () use (&$pages, &$current, &$y) {
+        if ($current) {
+            $pages[] = $current;
+        }
+        $current = [];
+        $y = 800;
+    };
+
+    $add_wrapped = function ($text, $fontSize = 10, $bold = false, $maxChars = 88, $spacing = 14) use (&$add_line, &$start_page, &$y, &$current, $wrap_pdf) {
+        foreach ($wrap_pdf($text, $maxChars) as $line) {
+            if ($y < 55) {
+                $start_page();
+            }
+            $current[] = [$line, $fontSize, $bold, $y];
+            $y -= $spacing;
+        }
+    };
+
+    $add_wrapped('RESPUESTAS DE EVALUACIÓN', 17, true, 55, 23);
+    $add_wrapped('Usuario: ' . ($intento['nombre_completo'] ?? 'Sin nombre'), 11, true);
+    $add_wrapped('Correo: ' . ($intento['email'] ?? 'Sin correo'), 10);
+    $add_wrapped('Curso: ' . ($intento['curso_nombre'] ?? 'Sin curso'), 10);
+    $add_wrapped('Evaluación #' . $intento['evaluacion_id'], 10);
+    $add_wrapped('Puntaje: ' . number_format($score, 1, ',', '.') . '% (' .
+        (string)$intento['puntaje_obtenido'] . ' de ' . (string)$intento['puntaje_total'] . ')', 10, true);
+    $add_wrapped('Estado: ' . ($estado !== '' ? ucfirst(str_replace('_', ' ', $estado)) : 'No registrado'), 10);
+    $add_wrapped('Fecha de finalización: ' . $fecha, 10);
+    if ($y < 75) {
+        $start_page();
+    }
+    $current[] = ['------------------------------------------------------------', 9, false, $y];
+    $y -= 18;
+
+    foreach ($preguntas_pdf as $index => $pregunta) {
+        if ($y < 95) {
+            $start_page();
+        }
+
+        $correcta = (int)$pregunta['correcta'] === 1;
+        $respuesta = ($pregunta['respuesta_usuario'] !== null && $pregunta['respuesta_usuario'] !== '')
+            ? $pregunta['respuesta_usuario']
+            : 'Sin respuesta';
+
+        $add_wrapped('Pregunta ' . ($index + 1) . ':', 11, true, 75, 15);
+        $add_wrapped($pregunta['pregunta'], 10, false, 88, 14);
+        $add_wrapped(
+            'Respuesta del usuario: ' . $respuesta,
+            10,
+            false,
+            88,
+            14
+        );
+        $add_wrapped('Resultado: ' . ($correcta ? 'Correcta (1 de 1)' : 'Incorrecta (0 de 1)'), 10, true, 88, 18);
+    }
+
+    if ($current) {
+        $pages[] = $current;
+    }
+
+    // Construcción del PDF.
+    $objects = [];
+    $objects[] = '<< /Type /Catalog /Pages 2 0 R >>';
+    $pageObjectNumbers = [];
+    $fontRegular = 3;
+    $fontBold = 4;
+
+    // Reservamos objetos de páginas y contenidos.
+    $nextObject = 5;
+    foreach ($pages as $pageIndex => $pageLines) {
+        $pageObjectNumbers[] = $nextObject;
+        $nextObject += 2;
+    }
+
+    $kids = [];
+    foreach ($pageObjectNumbers as $num) {
+        $kids[] = $num . ' 0 R';
+    }
+    $objects[] = '<< /Type /Pages /Kids [' . implode(' ', $kids) . '] /Count ' . count($pages) . ' >>';
+    $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+    $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+
+    foreach ($pages as $pageIndex => $pageLines) {
+        $pageNum = $pageObjectNumbers[$pageIndex];
+        $contentNum = $pageNum + 1;
+        $stream = "BT\n";
+
+        foreach ($pageLines as $lineData) {
+            [$text, $fontSize, $bold, $lineY] = $lineData;
+            $fontRef = $bold ? $fontBold : $fontRegular;
+            $stream .= "/F{$fontRef} {$fontSize} Tf\n";
+            $stream .= "50 {$lineY} Td\n";
+            $stream .= '(' . $pdf_escape($text) . ") Tj\n";
+            $stream .= "-50 -{$lineY} Td\n";
+        }
+
+        // Pie de página.
+        $stream .= "/F{$fontRegular} 8 Tf\n";
+        $stream .= "50 30 Td\n";
+        $stream .= '(' . $pdf_escape('Documento generado desde Reportes y Estadísticas') . ") Tj\n";
+        $stream .= "ET\n";
+
+        $objects[$pageNum - 1] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F3 3 0 R /F4 4 0 R >> >> /Contents ' . $contentNum . ' 0 R >>';
+        $objects[$contentNum - 1] = '<< /Length ' . strlen($stream) . " >>\nstream\n" . $stream . "endstream";
+    }
+
+    $pdf = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
+    $offsets = [0];
+
+    // Los índices de objeto deben ser exactos. Reconstruimos la lista completa
+    // para evitar huecos al crear varias páginas.
+    $allObjects = [
+        1 => $objects[0],
+        2 => $objects[1],
+        3 => $objects[2],
+        4 => $objects[3],
+    ];
+
+    foreach ($pages as $pageIndex => $pageLines) {
+        $pageNum = $pageObjectNumbers[$pageIndex];
+        $contentNum = $pageNum + 1;
+
+        $stream = "BT\n";
+        foreach ($pageLines as $lineData) {
+            [$text, $fontSize, $bold, $lineY] = $lineData;
+            $fontRef = $bold ? 4 : 3;
+            $stream .= "/F{$fontRef} {$fontSize} Tf\n";
+            $stream .= "50 {$lineY} Td\n";
+            $stream .= '(' . $pdf_escape($text) . ") Tj\n";
+            $stream .= "-50 -{$lineY} Td\n";
+        }
+        $stream .= "/F3 8 Tf\n50 30 Td\n(" .
+            $pdf_escape('Documento generado desde Reportes y Estadísticas') .
+            ") Tj\nET\n";
+
+        $allObjects[$pageNum] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F3 3 0 R /F4 4 0 R >> >> /Contents ' . $contentNum . ' 0 R >>';
+        $allObjects[$contentNum] = '<< /Length ' . strlen($stream) . " >>\nstream\n" . $stream . "endstream";
+    }
+
+    ksort($allObjects);
+
+    foreach ($allObjects as $num => $body) {
+        $offsets[$num] = strlen($pdf);
+        $pdf .= $num . " 0 obj\n" . $body . "\nendobj\n";
+    }
+
+    $xref = strlen($pdf);
+    $maxObject = max(array_keys($allObjects));
+    $pdf .= "xref\n0 " . ($maxObject + 1) . "\n";
+    $pdf .= "0000000000 65535 f \n";
+    for ($i = 1; $i <= $maxObject; $i++) {
+        $pdf .= sprintf("%010d 00000 n \n", $offsets[$i] ?? 0);
+    }
+    $pdf .= "trailer\n<< /Size " . ($maxObject + 1) . " /Root 1 0 R >>\n";
+    $pdf .= "startxref\n" . $xref . "\n%%EOF";
+
+    // Nombre del archivo: Curso_Usuario.pdf, limpio para evitar problemas en Windows/navegadores.
+    $normalizarNombreArchivo = function ($texto) {
+        $texto = (string)$texto;
+        if (function_exists('iconv')) {
+            $transliterado = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $texto);
+            if ($transliterado !== false) {
+                $texto = $transliterado;
+            }
+        }
+        $texto = preg_replace('/[^A-Za-z0-9]+/', '_', $texto);
+        $texto = trim($texto, '_');
+        return $texto !== '' ? $texto : 'Sin_nombre';
+    };
+
+    $cursoArchivo = $normalizarNombreArchivo($intento['curso_nombre'] ?? 'Sin curso');
+    $usuarioArchivo = $normalizarNombreArchivo($intento['nombre_completo'] ?? 'Sin usuario');
+    $nombreArchivo = $cursoArchivo . '_' . $usuarioArchivo . '.pdf';
+
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="' . $nombreArchivo . '"');
+    header('Content-Length: ' . strlen($pdf));
+    header('Cache-Control: private, max-age=0, must-revalidate');
+    header('Pragma: public');
+    echo $pdf;
+    exit;
+}
+
 // Endpoint AJAX para detalle de preguntas por intento
 if (isset($_GET['ajax_detalle_intento'])) {
     header('Content-Type: application/json; charset=utf-8');
@@ -434,6 +761,9 @@ require_once '../includes/header.php';
                 <div class="text-center text-muted">Selecciona un puntaje para ver el detalle.</div>
             </div>
             <div class="modal-footer">
+                <a href="#" id="btnDescargarRespuestasPDF" class="btn btn-primary d-none" target="_blank" rel="noopener">
+                    <i class="bi bi-file-earmark-pdf me-1"></i>Descargar respuestas en PDF
+                </a>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
@@ -458,6 +788,7 @@ require_once '../includes/header.php';
 document.addEventListener('DOMContentLoaded', function() {
     var modalEl = document.getElementById('modalDetallePreguntas');
     var contenido = document.getElementById('contenidoDetallePreguntas');
+    var btnDescargarPDF = document.getElementById('btnDescargarRespuestasPDF');
     if (!modalEl || !contenido) return;
 
     var modal = (typeof bootstrap !== 'undefined' && bootstrap.Modal) ? new bootstrap.Modal(modalEl) : null;
@@ -474,6 +805,10 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderDetalle(detallePreguntas) {
         if (!Array.isArray(detallePreguntas) || detallePreguntas.length === 0) {
             contenido.innerHTML = '<div class="alert alert-info mb-0">No hay preguntas para mostrar.</div>';
+            if (btnDescargarPDF) {
+                btnDescargarPDF.classList.add('d-none');
+                btnDescargarPDF.removeAttribute('href');
+            }
             return;
         }
         var html = '';
@@ -497,6 +832,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.btn-ver-detalle-puntaje').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var intentoId = parseInt(this.getAttribute('data-intento-id') || '0', 10);
+            if (btnDescargarPDF) {
+                btnDescargarPDF.classList.add('d-none');
+                btnDescargarPDF.removeAttribute('href');
+            }
             if (!intentoId) {
                 contenido.innerHTML = '<div class="alert alert-warning mb-0">No se encontró un intento para este usuario.</div>';
                 if (modal) modal.show();
@@ -515,6 +854,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                     renderDetalle(data.detalle_preguntas || []);
+
+                    if (btnDescargarPDF && data.detalle_preguntas && data.detalle_preguntas.length > 0) {
+                        btnDescargarPDF.href = 'reportes.php?descargar_pdf=1&intento_id=' + encodeURIComponent(intentoId);
+                        btnDescargarPDF.classList.remove('d-none');
+                    }
                 })
                 .catch(function() {
                     contenido.innerHTML = '<div class="alert alert-danger mb-0">Error al cargar el detalle de preguntas.</div>';
