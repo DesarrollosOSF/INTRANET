@@ -18,40 +18,11 @@
 
 function enviarCorreoFormacion(string $destinatario, string $asunto, string $cuerpoHtml): bool
 {
-    $autoload = __DIR__ . '/../vendor/autoload.php';
-
-    if (is_file($autoload)) {
-        require_once $autoload;
-        if (class_exists('PHPMailer\PHPMailer\PHPMailer') && defined('SMTP_HOST')) {
-            try {
-                $mail = new PHPMailer\PHPMailer\PHPMailer(true);
-                $mail->isSMTP();
-                $mail->Host = SMTP_HOST;
-                $mail->SMTPAuth = true;
-                $mail->Username = SMTP_USER;
-                $mail->Password = SMTP_PASS;
-                $mail->SMTPSecure = defined('SMTP_SEGURIDAD') ? SMTP_SEGURIDAD : 'tls';
-                $mail->Port = defined('SMTP_PORT') ? SMTP_PORT : 587;
-                $mail->CharSet = 'UTF-8';
-
-                $mail->setFrom(SMTP_FROM_EMAIL, defined('SMTP_FROM_NOMBRE') ? SMTP_FROM_NOMBRE : 'Intranet');
-                $mail->addAddress($destinatario);
-                $mail->isHTML(true);
-                $mail->Subject = $asunto;
-                $mail->Body = $cuerpoHtml;
-
-                return $mail->send();
-            } catch (Exception $e) {
-                error_log('Error PHPMailer (Formación): ' . $e->getMessage());
-                return false;
-            }
-        }
-    }
-
-    // Respaldo si no hay PHPMailer/SMTP configurado: mail() nativa (menos confiable, puede caer en spam)
-    $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\n";
-    $headers .= 'From: Intranet OSF <no-responder@osf.com.co>' . "\r\n";
-    return @mail($destinatario, $asunto, $cuerpoHtml, $headers);
+    require_once __DIR__ . '/mailer.php';
+    $r = enviarCorreoGeneral($destinatario, $asunto, $cuerpoHtml);
+    return $r['ok'];
+    // NOTA: implementación SMTP/PHPMailer anterior migrada a includes/mailer.php
+    // para compartir configuración y servir a @osf.com.co y @gmail.com por igual.
 }
 
 function plantillaCorreoFormacion(string $titulo, string $mensajeHtml): string

@@ -1,5 +1,6 @@
 <?php
 require_once 'config/config.php';
+require_once 'includes/mailer.php';
 
 // Si ya está autenticado, redirigir al dashboard
 if (isset($_SESSION['usuario_id'])) {
@@ -18,12 +19,15 @@ $dependencias = $stmt->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = sanitizar($_POST['nombre_completo'] ?? '');
-    $email = sanitizar($_POST['email'] ?? '');
+    $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $dependencia_id = !empty($_POST['dependencia_id']) ? (int)$_POST['dependencia_id'] : null;
-    
+
     if (empty($nombre) || empty($email) || empty($password)) {
         $mensaje = 'Por favor complete todos los campos';
+        $tipo_mensaje = 'danger';
+    } elseif (!validarEmailDestino($email)) {
+        $mensaje = 'El email no es válido. Revisa que esté bien escrito (@osf.com.co o @gmail.com).';
         $tipo_mensaje = 'danger';
     } else {
         try {
@@ -37,8 +41,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $usuario_id = $pdo->lastInsertId();
             $stmt = $pdo->prepare("INSERT INTO usuario_perfiles (usuario_id, perfil_id) VALUES (?, ?)");
             $stmt->execute([$usuario_id, $PERFIL_COLABORADOR]);
-            
+
+            // Avisar al usuario que su solicitud fue recibida (no es la bienvenida final;
+            // la bienvenida se envía cuando el admin active la cuenta).
+            $cuerpo = plantillaCorreoSolicitudRecibida($nombre);
+            $res = enviarCorreoGeneral($email, 'Solicitud recibida - Intranet OSF', $cuerpo);
+            if (!$res['ok']) {
+                error_log('Registro: no se pudo enviar confirmación a ' . $email . ': ' . ($res['error'] ?? 'desconocido'));
+            }
+
             $mensaje = 'Solicitud de registro enviada. Un administrador activará su cuenta y le asignará el rol correspondiente.';
+            if (!$res['ok']) {
+                $mensaje .= ' (Nota: no pudimos enviarte el correo de confirmación, pero tu solicitud sí quedó registrada.)';
+            }
             $tipo_mensaje = 'success';
             $_POST = [];
         } catch (PDOException $e) {

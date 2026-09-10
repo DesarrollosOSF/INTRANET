@@ -1,5 +1,6 @@
 <?php
 require_once '../config/config.php';
+require_once '../includes/mailer.php';
 requerirPermiso('gestionar_usuarios');
 
 $pdo = getDBConnection();
@@ -132,12 +133,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
     
     if ($accion === 'crear') {
-        $nombre = sanitizar($_POST['nombre_completo']);
-        $email = sanitizar($_POST['email']);
-        $password = $_POST['password'];
-        $rol_id = (int)$_POST['rol_id'];
+        $nombre = sanitizar($_POST['nombre_completo'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $rol_id = (int)($_POST['rol_id'] ?? 0);
         $dependencia_id = !empty($_POST['dependencia_id']) ? (int)$_POST['dependencia_id'] : null;
-        
+
+        if (!validarEmailDestino($email)) {
+            $mensaje = 'El email no es válido. Revisa que esté bien escrito (@osf.com.co o @gmail.com).';
+            $tipo_mensaje = 'danger';
+        } elseif ($password === '' || $rol_id <= 0) {
+            $mensaje = 'Nombre, email, contraseña y rol son obligatorios.';
+            $tipo_mensaje = 'danger';
+        } else {
         try {
             $password_hash = password_hash($password, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare("
@@ -145,50 +153,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (?, ?, ?, ?, ?)
             ");
             $stmt->execute([$nombre, $email, $password_hash, $rol_id, $dependencia_id]);
-            
+
             $usuario_id = $pdo->lastInsertId();
-            
+
             // Asignar perfil según rol: 1=Super Admin, 2=Colaborador/Usuario básico, 3=Administrador
             $perfil_id = $rol_id;
             $stmt = $pdo->prepare("INSERT INTO usuario_perfiles (usuario_id, perfil_id) VALUES (?, ?)");
             $stmt->execute([$usuario_id, $perfil_id]);
-            
+
             registrarLog($_SESSION['usuario_id'], 'Crear usuario', 'Usuarios', "Usuario: $email");
+
+            // Correo de bienvenida (el usuario queda activo por defecto al crearlo desde admin).
+            // Se incluye la contraseña temporal para que pueda entrar la primera vez.
+            $cuerpo = plantillaCorreoBienvenida($nombre, $email, $password);
+            $res = enviarCorreoGeneral($email, 'Bienvenido a la Intranet OSF', $cuerpo);
+            if (!$res['ok']) {
+                error_log('Crear usuario: bienvenida no enviada a ' . $email . ': ' . ($res['error'] ?? 'desconocido'));
+            }
             $mensaje = 'Usuario creado exitosamente';
-            $tipo_mensaje = 'success';
+            $mensaje .= $res['ok']
+                ? ' y correo de bienvenida enviado (' . $res['metodo'] . ').'
+                : ' pero el correo de bienvenida NO pudo enviarse: ' . htmlspecialchars($res['error'] ?? 'error desconocido');
+            $tipo_mensaje = $res['ok'] ? 'success' : 'warning';
         } catch (PDOException $e) {
             $mensaje = 'Error al crear usuario: ' . ($e->getCode() == 23000 ? 'El email ya existe' : $e->getMessage());
             $tipo_mensaje = 'danger';
         }
+        }
     } elseif ($accion === 'editar') {
         $id = (int)$_POST['id'];
-        $nombre = sanitizar($_POST['nombre_completo']);
-        $email = sanitizar($_POST['email']);
-        $rol_id = (int)$_POST['rol_id'];
+        $nombre = sanitizar($_POST['nombre_completo'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $rol_id = (int)($_POST['rol_id'] ?? 0);
         $dependencia_id = !empty($_POST['dependencia_id']) ? (int)$_POST['dependencia_id'] : null;
         $activo = isset($_POST['activo']) ? 1 : 0;
-        
+
+        if (!validarEmailDestino($email)) {
+            $mensaje = 'El email no es válido. Revisa que esté bien escrito (@osf.com.co o @gmail.com).';
+            $tipo_mensaje = 'danger';
+        } else {
         try {
+            // Estado previo para detectar activación 0 -> 1 y enviar bienvenida solo en ese caso
+            $stmtPrev = $pdo->prepare("SELECT activo, email, nombre_completo FROM usuarios WHERE id = ?");
+            $stmtPrev->execute([$id]);
+            $prev = $stmtPrev->fetch();
+            $estaba_activo = $prev ? (int)$prev['activo'] : 1;
+
             $stmt = $pdo->prepare("
-                UPDATE usuarios 
+                UPDATE usuarios
                 SET nombre_completo = ?, email = ?, rol_id = ?, dependencia_id = ?, activo = ?
                 WHERE id = ?
             ");
             $stmt->execute([$nombre, $email, $rol_id, $dependencia_id, $activo, $id]);
-            
+
             // Actualizar perfil según rol: 1=Super Admin, 2=Colaborador, 3=Administrador
             $perfil_id = $rol_id;
             $stmt = $pdo->prepare("DELETE FROM usuario_perfiles WHERE usuario_id = ?");
             $stmt->execute([$id]);
             $stmt = $pdo->prepare("INSERT INTO usuario_perfiles (usuario_id, perfil_id) VALUES (?, ?)");
             $stmt->execute([$id, $perfil_id]);
-            
+
             registrarLog($_SESSION['usuario_id'], 'Editar usuario', 'Usuarios', "Usuario ID: $id");
-            $mensaje = 'Usuario actualizado exitosamente';
-            $tipo_mensaje = 'success';
+
+            // Si se acaba de activar la cuenta (solicitud de registro aprobada), enviar bienvenida.
+            // Sin contraseña aquí porque el usuario ya la definió al registrarse.
+            if ($estaba_activo === 0 && $activo === 1) {
+                $cuerpo = plantillaCorreoBienvenida($nombre, $email, null);
+                $res = enviarCorreoGeneral($email, 'Tu cuenta OSF fue activada', $cuerpo);
+                if (!$res['ok']) {
+                    error_log('Activar usuario: bienvenida no enviada a ' . $email . ': ' . ($res['error'] ?? 'desconocido'));
+                }
+                $mensaje = 'Usuario actualizado y activado. Correo de bienvenida '
+                    . ($res['ok'] ? 'enviado (' . $res['metodo'] . ').' : 'NO pudo enviarse: ' . htmlspecialchars($res['error'] ?? 'error'));
+                $tipo_mensaje = $res['ok'] ? 'success' : 'warning';
+            } else {
+                $mensaje = 'Usuario actualizado exitosamente';
+                $tipo_mensaje = 'success';
+            }
         } catch (PDOException $e) {
             $mensaje = 'Error al actualizar usuario: ' . $e->getMessage();
             $tipo_mensaje = 'danger';
+        }
         }
     } elseif ($accion === 'cambiar_password') {
         $id = (int)$_POST['id'];
