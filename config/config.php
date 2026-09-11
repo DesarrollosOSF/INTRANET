@@ -10,22 +10,38 @@ ini_set('session.cookie_secure', 0); // Cambiar a 1 en producción con HTTPS
 session_start();
 
 
-define('SMTP_HOST', 'mail.osf.com.co');
-define('SMTP_USER', 'notificaciones@osf.com.co');
-define('SMTP_PASS', 'tu_password');
-define('SMTP_PORT', 587);
-define('SMTP_SEGURIDAD', 'tls');
-define('SMTP_FROM_EMAIL', 'notificaciones@osf.com.co');
-define('SMTP_FROM_NOMBRE', 'Intranet OSF');
+// Override local opcional: config/local.php puede definir SMTP_*, BASE_URL, etc.
+// Se carga ANTES para que tenga prioridad sobre los valores por defecto.
+// Ese archivo está en .gitignore, así las claves no se suben al repo.
+if (file_exists(__DIR__ . '/local.php')) {
+    require_once __DIR__ . '/local.php';
+}
+
+if (!defined('SMTP_HOST')) {
+    define('SMTP_HOST', 'mail.osf.com.co');
+}
+if (!defined('SMTP_USER')) {
+    define('SMTP_USER', 'yessimarar04@gmail.com');
+}
+if (!defined('SMTP_PASS')) {
+    define('SMTP_PASS', 'hpuf cktl fgar fwve');
+}
+if (!defined('SMTP_PORT')) {
+    define('SMTP_PORT', 587);
+}
+if (!defined('SMTP_SEGURIDAD')) {
+    define('SMTP_SEGURIDAD', 'tls');
+}
+if (!defined('SMTP_FROM_EMAIL')) {
+    define('SMTP_FROM_EMAIL', 'yessimarar04@gmail.com');
+}
+if (!defined('SMTP_FROM_NOMBRE')) {
+    define('SMTP_FROM_NOMBRE', 'Intranet OSF');
+}
 // define('BASE_URL', 'https://intranet.osf.com.co'); // sin slash al final
 
 // Zona horaria
 date_default_timezone_set('America/Bogota');
-
-// Override opcional: crear config/local.php con define('BASE_URL', '...'); para forzar una ruta
-if (file_exists(__DIR__ . '/local.php')) {
-    require_once __DIR__ . '/local.php';
-}
 
 // Rutas: BASE_URL se calcula según la ubicación del proyecto (funciona en local y en servidor)
 if (!defined('BASE_URL')) {
