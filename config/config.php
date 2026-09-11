@@ -18,16 +18,13 @@ if (file_exists(__DIR__ . '/local.php')) {
 }
 
 if (!defined('SMTP_HOST')) {
-    define('SMTP_HOST', 'mail.osf.com.co'); 
+    define('SMTP_HOST', 'mail.osf.com.co');
 }
 if (!defined('SMTP_USER')) {
-    define('SMTP_USER', 'notificaciones@osf.com.co'); //Aqui se peude poner un correo especial de intranet
+    define('SMTP_USER', 'yessimarar04@gmail.com');
 }
-// Aqui la contraseña de ese correo pero para no dejar la contraseña
-// se puede ir a la configuracion en 2 pasos de la cuenta y generar una clave de 16 caracteres para ponerla aqui
-// Esa clave no deberia subirse al repositorio git por seguridad 
 if (!defined('SMTP_PASS')) {
-    define('SMTP_PASS', 'tu_password'); 
+    define('SMTP_PASS', 'hpuf cktl fgar fwve');
 }
 if (!defined('SMTP_PORT')) {
     define('SMTP_PORT', 587);
@@ -36,7 +33,7 @@ if (!defined('SMTP_SEGURIDAD')) {
     define('SMTP_SEGURIDAD', 'tls');
 }
 if (!defined('SMTP_FROM_EMAIL')) {
-    define('SMTP_FROM_EMAIL', 'no-responder@osf.com.co');
+    define('SMTP_FROM_EMAIL', 'yessimarar04@gmail.com');
 }
 if (!defined('SMTP_FROM_NOMBRE')) {
     define('SMTP_FROM_NOMBRE', 'Intranet OSF');

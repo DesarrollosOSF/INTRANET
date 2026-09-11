@@ -194,3 +194,163 @@ if (!function_exists('plantillaCorreoSolicitudRecibida')) {
         ");
     }
 }
+
+if (!function_exists('sanearDebugSmtp')) {
+    /**
+     * Quita credenciales (AUTH LOGIN en base64 y la clave literal) del log de PHPMailer.
+     */
+    function sanearDebugSmtp(string $log): string
+    {
+        $lineas = explode("\n", $log);
+        $out = [];
+        $ocultar = 0;
+        foreach ($lineas as $ln) {
+            if (stripos($ln, 'AUTH LOGIN') !== false) {
+                $out[] = $ln;
+                $ocultar = 2;
+                continue;
+            }
+            if ($ocultar > 0 && strpos($ln, 'CLIENT -> SERVER') !== false
+                && preg_match('/[A-Za-z0-9+\/=]{12,}\s*$/', $ln)) {
+                $out[] = preg_replace('/[A-Za-z0-9+\/=]{12,}\s*$/', '[credencial oculta]', $ln);
+                $ocultar--;
+                continue;
+            }
+            $out[] = $ln;
+        }
+        $texto = implode("\n", $out);
+        if (defined('SMTP_PASS') && SMTP_PASS !== '' && SMTP_PASS !== 'tu_password') {
+            $texto = str_replace((string)SMTP_PASS, '[clave oculta]', $texto);
+        }
+        return $texto;
+    }
+}
+
+if (!function_exists('probarConexionSmtp')) {
+    /**
+     * Etapa 1 del diagnóstico: ¿el servidor puede abrir conexión TCP al SMTP?
+     * Si falla aquí, el hosting bloquea SMTP saliente (muy común en compartidos).
+     * @return array{ok:bool, error:string|null, latencia_ms:int|null, saludo:string|null}
+     */
+    function probarConexionSmtp(int $timeout = 10): array
+    {
+        $host = defined('SMTP_HOST') ? trim((string)SMTP_HOST) : '';
+        $port = defined('SMTP_PORT') ? (int)SMTP_PORT : 587;
+        if ($host === '') {
+            return ['ok' => false, 'error' => 'SMTP_HOST vacío', 'latencia_ms' => null, 'saludo' => null];
+        }
+        $t0 = microtime(true);
+        $errno = 0;
+        $errstr = '';
+        $fp = @fsockopen($host, $port, $errno, $errstr, $timeout);
+        $ms = (int)round((microtime(true) - $t0) * 1000);
+        if (!$fp) {
+            return [
+                'ok' => false,
+                'error' => "No se pudo conectar a {$host}:{$port} ({$ms} ms). Detalle: [{$errno}] {$errstr}. "
+                    . 'Causa típica: el hosting bloquea conexiones SMTP externas.',
+                'latencia_ms' => $ms,
+                'saludo' => null,
+            ];
+        }
+        stream_set_timeout($fp, 5);
+        $saludo = fgets($fp, 512);
+        fclose($fp);
+        return ['ok' => true, 'error' => null, 'latencia_ms' => $ms, 'saludo' => trim((string)$saludo)];
+    }
+}
+
+if (!function_exists('probarEnvioSmtp')) {
+    /**
+     * Etapa 2 del diagnóstico: intento de envío SOLO por SMTP (sin fallback),
+     * devolviendo el error exacto de PHPMailer y su log saneado.
+     * @return array{ok:bool, error:string|null, debug:string}
+     */
+    function probarEnvioSmtp(string $destinatario): array
+    {
+        $destinatario = trim($destinatario);
+        if (!validarEmailDestino($destinatario)) {
+            return ['ok' => false, 'error' => 'Email destinatario inválido', 'debug' => ''];
+        }
+        if (!mailerSmtpConfigurado()) {
+            return ['ok' => false, 'error' => 'SMTP no configurado (SMTP_PASS sin definir)', 'debug' => ''];
+        }
+        if (!mailerPhpmailerDisponible()) {
+            return ['ok' => false, 'error' => 'PHPMailer no instalado (falta vendor/)', 'debug' => ''];
+        }
+        $log = '';
+        try {
+            $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host = SMTP_HOST;
+            $mail->SMTPAuth = true;
+            $mail->Username = SMTP_USER;
+            $mail->Password = SMTP_PASS;
+            $mail->SMTPSecure = defined('SMTP_SEGURIDAD') ? SMTP_SEGURIDAD : 'tls';
+            $mail->Port = defined('SMTP_PORT') ? SMTP_PORT : 587;
+            $mail->CharSet = 'UTF-8';
+            $mail->Timeout = 15;
+            $mail->SMTPDebug = 2;
+            $mail->Debugoutput = function ($str) use (&$log) {
+                $log .= $str . "\n";
+            };
+
+            $fromEmail = defined('SMTP_FROM_EMAIL') ? SMTP_FROM_EMAIL : SMTP_USER;
+            $fromNombre = defined('SMTP_FROM_NOMBRE') ? SMTP_FROM_NOMBRE : 'Intranet OSF';
+            $mail->setFrom($fromEmail, $fromNombre);
+            $mail->addAddress($destinatario);
+            $mail->isHTML(true);
+            $mail->Subject = 'Prueba SMTP — Intranet OSF (' . date('H:i:s') . ')';
+            $mail->Body = plantillaCorreoGeneral('Prueba SMTP — Intranet OSF', '
+                <p>Si recibiste este correo, el envío SMTP funciona correctamente.</p>
+                <p>Fecha: ' . date('d/m/Y H:i:s') . '</p>');
+            $mail->AltBody = 'Si recibiste este correo, el envío SMTP funciona correctamente.';
+
+            $mail->send();
+            return ['ok' => true, 'error' => null, 'debug' => sanearDebugSmtp($log)];
+        } catch (Throwable $e) {
+            $detalle = sanearDebugSmtp($log);
+            // Anexa la última respuesta 5xx del servidor al error para que el
+            // diagnóstico muestre la causa real (el getMessage() suele ser genérico).
+            $msg = $e->getMessage();
+            if (preg_match_all('/SERVER -> CLIENT:\s*(5\d\d[^\r\n]*)/i', $log, $m) && !empty($m[1])) {
+                $ultima = trim(end($m[1]));
+                $msg .= ' | Respuesta del servidor: ' . $ultima;
+            }
+            error_log('Mailer OSF (prueba SMTP): ' . $msg);
+            return ['ok' => false, 'error' => $msg, 'debug' => $detalle];
+        }
+    }
+}
+
+if (!function_exists('interpretarErrorSmtp')) {
+    /**
+     * Traduce los errores típicos de SMTP a causa probable y solución.
+     */
+    function interpretarErrorSmtp(string $error): string
+    {
+        $e = strtolower($error);
+        if (strpos($e, 'could not connect') !== false || strpos($e, 'connection timed out') !== false
+            || strpos($e, 'failed to connect') !== false || strpos($e, 'connection refused') !== false) {
+            return 'El servidor no logra hablar con el SMTP (puerto bloqueado o sin internet saliente). '
+                . 'Soluciones: pedir al hosting que abra el puerto 587 hacia smtp.gmail.com, '
+                . 'o usar el SMTP del propio hosting en lugar del de Gmail.';
+        }
+        if (strpos($e, 'password not accepted') !== false || strpos($e, '535') !== false
+            || strpos($e, 'authentication failed') !== false || strpos($e, 'invalid credentials') !== false) {
+            return 'Gmail rechazó usuario/clave. Revisa: (1) verificación en 2 pasos activa, '
+                . '(2) usar la contraseña de aplicación de 16 letras SIN espacios, no la clave normal, '
+                . '(3) que SMTP_USER sea el Gmail completo.';
+        }
+        if (strpos($e, 'must issue a starttls') !== false) {
+            return 'Falta STARTTLS: usa puerto 587 con seguridad tls.';
+        }
+        if (strpos($e, 'daily sending quota') !== false || strpos($e, 'quota exceeded') !== false) {
+            return 'Se superó el límite diario de Gmail (~500/día). Espera 24h o usa otro remitente.';
+        }
+        if (strpos($e, 'application-specific password required') !== false) {
+            return 'Google exige contraseña de aplicación: actívala en myaccount.google.com → Seguridad.';
+        }
+        return 'Revisa el detalle técnico y el error_log del servidor para más información.';
+    }
+}
